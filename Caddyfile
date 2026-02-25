@@ -1,0 +1,7 @@
+orka-ui.duckdns.org {
+  reverse_proxy orka-ui:80
+}
+
+orka-service.duckdns.org {
+  reverse_proxy orka-service:8082
+}
