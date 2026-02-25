@@ -33,10 +33,24 @@ services:
   orka-ui:
     image: ghcr.io/divyaprakashmj20/orka-ui:latest
     restart: unless-stopped
-    ports:
-      - "80:80"
     volumes:
       - /opt/orka/firebase-config.json:/usr/share/nginx/html/firebase-config.json:ro
 
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - orka-ui
+      - orka-service
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
