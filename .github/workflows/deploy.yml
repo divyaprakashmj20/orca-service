@@ -50,7 +50,7 @@ jobs:
           port: ${{ secrets.OCI_PORT }}
           key: ${{ secrets.OCI_SSH_KEY }}
           source: deploy/docker-compose.yml
-          target: /opt/orka
+          target: /tmp/orka-deploy
           overwrite: true
 
       - name: Deploy on VM
@@ -63,7 +63,7 @@ jobs:
           script: |
             set -e
             sudo mkdir -p /opt/orka
-            sudo mv /opt/orka/deploy/docker-compose.yml /opt/orka/docker-compose.yml || true
+            sudo mv /tmp/orka-deploy/deploy/docker-compose.yml /opt/orka/docker-compose.yml || true
             sudo chown -R $USER:$USER /opt/orka
             cat >/opt/orka/.env <<'EOF'
             POSTGRES_DB=orka
