@@ -33,6 +33,8 @@ services:
       - orka-service
     ports:
       - "80:80"
+    volumes:
+      - /opt/orka/firebase-config.json:/usr/share/nginx/html/firebase-config.json:ro
 
 volumes:
   pgdata:

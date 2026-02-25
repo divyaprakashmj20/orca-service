@@ -74,5 +74,8 @@ jobs:
             SPRING_DATASOURCE_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             SPRING_JPA_HIBERNATE_DDL_AUTO=update
             EOF
+            cat >/opt/orka/firebase-config.json <<'EOF'
+            ${{ secrets.FIREBASE_CONFIG_JSON }}
+            EOF
             sudo docker compose -f /opt/orka/docker-compose.yml pull postgres orka-service
             sudo docker compose -f /opt/orka/docker-compose.yml up -d postgres orka-service
