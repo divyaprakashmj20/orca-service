@@ -6,6 +6,7 @@ import com.lytspeed.orka.repository.EmployeeRepository;
 import com.lytspeed.orka.repository.HotelRepository;
 import com.lytspeed.orka.repository.RequestRepository;
 import com.lytspeed.orka.repository.RoomRepository;
+import com.lytspeed.orka.service.FcmNotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,17 +23,20 @@ public class RequestController {
     private final HotelRepository hotelRepository;
     private final RoomRepository roomRepository;
     private final EmployeeRepository employeeRepository;
+    private final FcmNotificationService fcmNotificationService;
 
     public RequestController(
             RequestRepository requestRepository,
             HotelRepository hotelRepository,
             RoomRepository roomRepository,
-            EmployeeRepository employeeRepository
+            EmployeeRepository employeeRepository,
+            FcmNotificationService fcmNotificationService
     ) {
         this.requestRepository = requestRepository;
         this.hotelRepository = hotelRepository;
         this.roomRepository = roomRepository;
         this.employeeRepository = employeeRepository;
+        this.fcmNotificationService = fcmNotificationService;
     }
 
     @GetMapping
@@ -60,7 +64,9 @@ public class RequestController {
         request.setHotel(hotel.get());
         request.setRoom(room.get());
         assignee.ifPresent(request::setAssignee);
-        return ResponseEntity.ok(toDto(requestRepository.save(request)));
+        Request saved = requestRepository.save(request);
+        fcmNotificationService.notifyNewRequest(saved);
+        return ResponseEntity.ok(toDto(saved));
     }
 
     @PutMapping("/{id}")

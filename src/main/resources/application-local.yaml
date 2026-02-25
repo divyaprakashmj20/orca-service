@@ -6,3 +6,8 @@ spring:
   jpa:
     hibernate:
       ddl-auto: "create"
+
+firebase:
+  admin:
+    credentials:
+      path: ".secrets/firebase-admin-sdk.json"
