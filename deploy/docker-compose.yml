@@ -15,7 +15,7 @@ services:
       retries: 5
 
   orka-service:
-    image: ghcr.io/dicyaprakashmj20/orka-service:latest
+    image: ghcr.io/divyaprakashmj20/orka-service:latest
     restart: unless-stopped
     depends_on:
       postgres:
@@ -27,7 +27,7 @@ services:
       SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO}
 
   orka-ui:
-    image: ghcr.io/dicyaprakashmj20/orka-ui:latest
+    image: ghcr.io/divyaprakashmj20/orka-ui:latest
     restart: unless-stopped
     depends_on:
       - orka-service

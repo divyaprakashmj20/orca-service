@@ -9,7 +9,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/dicyaprakashmj20/orka-service
+  IMAGE_NAME: ghcr.io/divyaprakashmj20/orka-service
   PLATFORM: linux/arm64
 
 jobs:
