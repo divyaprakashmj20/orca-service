@@ -3,6 +3,16 @@ name: Build and Deploy (Service)
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Deploy to VM after build"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 permissions:
   contents: read
@@ -13,7 +23,7 @@ env:
   PLATFORM: linux/arm64
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -42,6 +52,49 @@ jobs:
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
 
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' || inputs.deploy == 'true'
+    environment: production
+    steps:
+      - name: Copy docker-compose to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          port: ${{ secrets.OCI_PORT }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          source: deploy/docker-compose.yml
+          target: /tmp/orka-deploy
+          overwrite: true
+
+      - name: Deploy on VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          port: ${{ secrets.OCI_PORT }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          script: |
+            set -e
+            sudo mkdir -p /opt/orka
+            sudo mv /tmp/orka-deploy/deploy/docker-compose.yml /opt/orka/docker-compose.yml || true
+            sudo chown -R $USER:$USER /opt/orka
+            cat >/opt/orka/.env <<'EOF'
+            POSTGRES_DB=orka
+            POSTGRES_USER=orka
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/orka
+            SPRING_DATASOURCE_USERNAME=orka
+            SPRING_DATASOURCE_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            SPRING_JPA_HIBERNATE_DDL_AUTO=update
+            EOF
+            cat >/opt/orka/firebase-config.json <<'EOF'
+            ${{ secrets.FIREBASE_CONFIG_JSON }}
+            EOF
+            sudo docker compose --env-file /opt/orka/.env -f /opt/orka/docker-compose.yml pull postgres orka-service
+            sudo docker compose --env-file /opt/orka/.env -f /opt/orka/docker-compose.yml up -d postgres orka-service
       - name: Copy docker-compose to VM
         uses: appleboy/scp-action@v0.1.7
         with:
