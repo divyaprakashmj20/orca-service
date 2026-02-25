@@ -58,6 +58,9 @@ jobs:
     if: github.event_name == 'push' || inputs.deploy == 'true'
     environment: production
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Copy docker-compose to VM
         uses: appleboy/scp-action@v0.1.7
         with:
