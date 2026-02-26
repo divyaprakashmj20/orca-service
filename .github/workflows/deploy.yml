@@ -97,6 +97,9 @@ jobs:
             cat >/opt/orka/firebase-config.json <<'EOF'
             ${{ secrets.FIREBASE_CONFIG_JSON }}
             EOF
+            cat >/opt/orka/firebase-admin-sdk.json <<'EOF'
+            ${{ secrets.FIREBASE_ADMIN_SDK_JSON }}
+            EOF
             sudo docker compose --env-file /opt/orka/.env -f /opt/orka/docker-compose.yml pull postgres orka-service caddy
             sudo docker compose --env-file /opt/orka/.env -f /opt/orka/docker-compose.yml up -d postgres orka-service caddy
       - name: Copy docker-compose to VM
@@ -133,6 +136,9 @@ jobs:
             EOF
             cat >/opt/orka/firebase-config.json <<'EOF'
             ${{ secrets.FIREBASE_CONFIG_JSON }}
+            EOF
+            cat >/opt/orka/firebase-admin-sdk.json <<'EOF'
+            ${{ secrets.FIREBASE_ADMIN_SDK_JSON }}
             EOF
             sudo docker compose --env-file /opt/orka/.env -f /opt/orka/docker-compose.yml pull postgres orka-service
             sudo docker compose --env-file /opt/orka/.env -f /opt/orka/docker-compose.yml up -d postgres orka-service
