@@ -5,8 +5,9 @@ import com.lytspeed.orka.dto.DeviceTokenRegisterRequest;
 import com.lytspeed.orka.dto.DeviceTokenUnregisterRequest;
 import com.lytspeed.orka.entity.AppUser;
 import com.lytspeed.orka.entity.DeviceToken;
-import com.lytspeed.orka.repository.AppUserRepository;
 import com.lytspeed.orka.repository.DeviceTokenRepository;
+import com.lytspeed.orka.security.AccessScopeService;
+import com.lytspeed.orka.security.AuthenticatedAppUserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,20 +22,34 @@ import java.util.Optional;
 public class DeviceTokenController {
 
     private final DeviceTokenRepository deviceTokenRepository;
-    private final AppUserRepository appUserRepository;
+    private final AuthenticatedAppUserService authenticatedAppUserService;
+    private final AccessScopeService accessScopeService;
 
-    public DeviceTokenController(DeviceTokenRepository deviceTokenRepository, AppUserRepository appUserRepository) {
+    public DeviceTokenController(
+            DeviceTokenRepository deviceTokenRepository,
+            AuthenticatedAppUserService authenticatedAppUserService,
+            AccessScopeService accessScopeService
+    ) {
         this.deviceTokenRepository = deviceTokenRepository;
-        this.appUserRepository = appUserRepository;
+        this.authenticatedAppUserService = authenticatedAppUserService;
+        this.accessScopeService = accessScopeService;
     }
 
     @GetMapping
     public List<DeviceTokenDto> getAll() {
-        return deviceTokenRepository.findAll().stream().map(this::toDto).toList();
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        if (accessScopeService.isSuperAdmin(actor)) {
+            return deviceTokenRepository.findAll().stream().map(this::toDto).toList();
+        }
+        return deviceTokenRepository.findByAppUserIdAndActiveTrue(actor.getId()).stream().map(this::toDto).toList();
     }
 
     @GetMapping("/app-user/{appUserId}")
     public List<DeviceTokenDto> getByAppUser(@PathVariable Long appUserId) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        if (!actor.getId().equals(appUserId) && !accessScopeService.isSuperAdmin(actor)) {
+            return List.of();
+        }
         return deviceTokenRepository.findByAppUserIdAndActiveTrue(appUserId).stream().map(this::toDto).toList();
     }
 
@@ -44,17 +59,12 @@ public class DeviceTokenController {
             return ResponseEntity.badRequest().build();
         }
 
-        String firebaseUid = input.getFirebaseUid().trim();
         String fcmToken = input.getFcmToken().trim();
         String platform = normalizePlatform(input.getPlatform());
-
-        Optional<AppUser> appUser = appUserRepository.findByFirebaseUid(firebaseUid);
-        if (appUser.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
+        AppUser appUser = authenticatedAppUserService.requireCurrentUser();
 
         DeviceToken deviceToken = deviceTokenRepository.findByFcmToken(fcmToken).orElseGet(DeviceToken::new);
-        deviceToken.setAppUser(appUser.get());
+        deviceToken.setAppUser(appUser);
         deviceToken.setFcmToken(fcmToken);
         deviceToken.setPlatform(platform);
         deviceToken.setActive(true);
@@ -70,12 +80,16 @@ public class DeviceTokenController {
         }
 
         String fcmToken = input.getFcmToken().trim();
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         Optional<DeviceToken> existing = deviceTokenRepository.findByFcmToken(fcmToken);
         if (existing.isEmpty()) {
             return ResponseEntity.noContent().build();
         }
 
         DeviceToken token = existing.get();
+        if (!token.getAppUser().getId().equals(actor.getId()) && !accessScopeService.isSuperAdmin(actor)) {
+            return ResponseEntity.noContent().build();
+        }
         token.setActive(false);
         token.setLastSeenAt(LocalDateTime.now());
         deviceTokenRepository.save(token);
@@ -84,7 +98,6 @@ public class DeviceTokenController {
 
     private boolean isValidRegister(DeviceTokenRegisterRequest input) {
         return input != null
-                && input.getFirebaseUid() != null && !input.getFirebaseUid().trim().isBlank()
                 && input.getFcmToken() != null && !input.getFcmToken().trim().isBlank()
                 && input.getPlatform() != null && !input.getPlatform().trim().isBlank();
     }

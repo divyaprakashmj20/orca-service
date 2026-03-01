@@ -9,14 +9,12 @@ import lombok.Setter;
 
 @Getter
 @Setter
-@AllArgsConstructor
 @NoArgsConstructor
-public class EmployeeDto {
+@AllArgsConstructor
+public class AppUserSummaryDto {
     private Long id;
     private String name;
-    private EmployeeRole role;
+    private EmployeeRole employeeRole;
     private AccessRole accessRole;
-    private String phone;
     private boolean active;
-    private HotelSummaryDto hotel;
 }

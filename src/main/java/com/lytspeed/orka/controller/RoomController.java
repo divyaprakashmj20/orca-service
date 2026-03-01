@@ -2,10 +2,13 @@ package com.lytspeed.orka.controller;
 
 import com.lytspeed.orka.dto.HotelSummaryDto;
 import com.lytspeed.orka.dto.RoomDto;
+import com.lytspeed.orka.entity.AppUser;
 import com.lytspeed.orka.entity.Hotel;
 import com.lytspeed.orka.entity.Room;
 import com.lytspeed.orka.repository.HotelRepository;
 import com.lytspeed.orka.repository.RoomRepository;
+import com.lytspeed.orka.security.AccessScopeService;
+import com.lytspeed.orka.security.AuthenticatedAppUserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,30 +24,43 @@ public class RoomController {
 
     private final RoomRepository roomRepository;
     private final HotelRepository hotelRepository;
+    private final AuthenticatedAppUserService authenticatedAppUserService;
+    private final AccessScopeService accessScopeService;
 
-    public RoomController(RoomRepository roomRepository, HotelRepository hotelRepository) {
+    public RoomController(
+            RoomRepository roomRepository,
+            HotelRepository hotelRepository,
+            AuthenticatedAppUserService authenticatedAppUserService,
+            AccessScopeService accessScopeService
+    ) {
         this.roomRepository = roomRepository;
         this.hotelRepository = hotelRepository;
+        this.authenticatedAppUserService = authenticatedAppUserService;
+        this.accessScopeService = accessScopeService;
     }
 
     @GetMapping
     public List<RoomDto> getAll() {
-        return roomRepository.findAll().stream()
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        return accessScopeService.filterRooms(actor, roomRepository.findAll()).stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<RoomDto> getById(@PathVariable Long id) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         return roomRepository.findById(id)
+                .filter(room -> accessScopeService.canManageRoom(actor, room))
                 .map(room -> ResponseEntity.ok(toDto(room)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping
     public ResponseEntity<RoomDto> create(@RequestBody Room room) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         Optional<Hotel> hotel = resolveHotel(room.getHotel());
-        if (hotel.isEmpty()) {
+        if (hotel.isEmpty() || !accessScopeService.canManageHotel(actor, hotel.get())) {
             return ResponseEntity.badRequest().build();
         }
         room.setHotel(hotel.get());
@@ -53,12 +69,16 @@ public class RoomController {
 
     @PutMapping("/{id}")
     public ResponseEntity<RoomDto> update(@PathVariable Long id, @RequestBody Room input) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         return roomRepository.findById(id)
+                .filter(existing -> accessScopeService.canManageRoom(actor, existing))
                 .map(existing -> {
                     existing.setNumber(input.getNumber());
                     existing.setFloor(input.getFloor());
                     Optional<Hotel> hotel = resolveHotel(input.getHotel());
-                    hotel.ifPresent(existing::setHotel);
+                    if (hotel.isPresent() && accessScopeService.canManageHotel(actor, hotel.get())) {
+                        existing.setHotel(hotel.get());
+                    }
                     return ResponseEntity.ok(toDto(roomRepository.save(existing)));
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -66,7 +86,9 @@ public class RoomController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        if (!roomRepository.existsById(id)) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        Optional<Room> room = roomRepository.findById(id);
+        if (room.isEmpty() || !accessScopeService.canManageRoom(actor, room.get())) {
             return ResponseEntity.notFound().build();
         }
         roomRepository.deleteById(id);

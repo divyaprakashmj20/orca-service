@@ -11,11 +11,15 @@ import com.lytspeed.orka.entity.Hotel;
 import com.lytspeed.orka.entity.HotelGroup;
 import com.lytspeed.orka.entity.enums.AccessRole;
 import com.lytspeed.orka.entity.enums.AppUserStatus;
+import com.lytspeed.orka.entity.enums.EmployeeRole;
 import com.lytspeed.orka.repository.AppUserRepository;
 import com.lytspeed.orka.repository.HotelGroupRepository;
 import com.lytspeed.orka.repository.HotelRepository;
+import com.lytspeed.orka.security.AccessScopeService;
+import com.lytspeed.orka.security.AuthenticatedAppUserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 import java.util.Locale;
@@ -30,28 +34,37 @@ public class AppUserController {
     private final AppUserRepository appUserRepository;
     private final HotelGroupRepository hotelGroupRepository;
     private final HotelRepository hotelRepository;
+    private final AuthenticatedAppUserService authenticatedAppUserService;
+    private final AccessScopeService accessScopeService;
 
     public AppUserController(
             AppUserRepository appUserRepository,
             HotelGroupRepository hotelGroupRepository,
-            HotelRepository hotelRepository
+            HotelRepository hotelRepository,
+            AuthenticatedAppUserService authenticatedAppUserService,
+            AccessScopeService accessScopeService
     ) {
         this.appUserRepository = appUserRepository;
         this.hotelGroupRepository = hotelGroupRepository;
         this.hotelRepository = hotelRepository;
+        this.authenticatedAppUserService = authenticatedAppUserService;
+        this.accessScopeService = accessScopeService;
     }
 
     @GetMapping
     public List<AppUserDto> getAll() {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         return appUserRepository.findAll().stream()
+                .filter(user -> accessScopeService.canReadAppUser(actor, user))
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<AppUserDto> getById(@PathVariable Long id) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         Optional<AppUser> user = appUserRepository.findById(id);
-        if (user.isEmpty()) {
+        if (user.isEmpty() || !accessScopeService.canReadAppUser(actor, user.get())) {
             return ResponseEntity.<AppUserDto>notFound().build();
         }
         return ResponseEntity.ok(toDto(user.get()));
@@ -59,8 +72,9 @@ public class AppUserController {
 
     @GetMapping("/firebase/{firebaseUid}")
     public ResponseEntity<AppUserDto> getByFirebaseUid(@PathVariable String firebaseUid) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         Optional<AppUser> user = appUserRepository.findByFirebaseUid(firebaseUid);
-        if (user.isEmpty()) {
+        if (user.isEmpty() || !accessScopeService.canReadAppUser(actor, user.get())) {
             return ResponseEntity.<AppUserDto>notFound().build();
         }
         return ResponseEntity.ok(toDto(user.get()));
@@ -68,8 +82,10 @@ public class AppUserController {
 
     @GetMapping("/pending")
     public List<AppUserDto> getPending() {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         return appUserRepository.findAll().stream()
                 .filter(user -> user.getStatus() == AppUserStatus.PENDING_APPROVAL)
+                .filter(user -> accessScopeService.canManagePendingUser(actor, user))
                 .map(this::toDto)
                 .toList();
     }
@@ -77,6 +93,11 @@ public class AppUserController {
     @PostMapping("/register")
     public ResponseEntity<AppUserDto> register(@RequestBody AppUserRegistrationRequest input) {
         if (!isValid(input)) {
+            return ResponseEntity.<AppUserDto>badRequest().build();
+        }
+
+        String authenticatedFirebaseUid = currentFirebaseUid();
+        if (authenticatedFirebaseUid == null || !authenticatedFirebaseUid.equals(input.getFirebaseUid().trim())) {
             return ResponseEntity.<AppUserDto>badRequest().build();
         }
 
@@ -135,6 +156,8 @@ public class AppUserController {
         if (isNew) {
             user.setStatus(AppUserStatus.PENDING_APPROVAL);
             user.setAccessRole(null);
+            user.setEmployeeRole(null);
+            user.setActive(true);
             user.setAssignedHotelGroup(null);
             user.setAssignedHotel(null);
         }
@@ -171,28 +194,68 @@ public class AppUserController {
         user.setAssignedHotel(null);
         user.setStatus(AppUserStatus.ACTIVE);
         user.setAccessRole(AccessRole.SUPERADMIN);
+        user.setEmployeeRole(null);
+        user.setActive(true);
 
         return ResponseEntity.ok(toDto(appUserRepository.save(user)));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<AppUserDto> update(@PathVariable Long id, @RequestBody AppUser input) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         Optional<AppUser> existingOpt = appUserRepository.findById(id);
         if (existingOpt.isEmpty()) {
             return ResponseEntity.<AppUserDto>notFound().build();
         }
 
         AppUser existing = existingOpt.get();
-        if (input.getName() != null) {
-            existing.setName(input.getName());
+        if (existing.getStatus() == AppUserStatus.PENDING_APPROVAL && input.getStatus() == AppUserStatus.REJECTED) {
+            if (!accessScopeService.canManagePendingUser(actor, existing)) {
+                return ResponseEntity.<AppUserDto>badRequest().build();
+            }
+            existing.setStatus(AppUserStatus.REJECTED);
+            existing.setActive(false);
+            return ResponseEntity.ok(toDto(appUserRepository.save(existing)));
         }
-        existing.setPhone(input.getPhone());
-        if (input.getStatus() != null) {
-            existing.setStatus(input.getStatus());
+
+        if (!accessScopeService.canReadAppUser(actor, existing)) {
+            return ResponseEntity.<AppUserDto>notFound().build();
         }
-        if (input.getAccessRole() != null) {
-            existing.setAccessRole(input.getAccessRole());
+
+        if (input.getName() != null && !input.getName().trim().isBlank()) {
+            existing.setName(input.getName().trim());
         }
+        if (input.getPhone() != null) {
+            String phone = input.getPhone().trim();
+            existing.setPhone(phone.isBlank() ? null : phone);
+        }
+
+        AccessRole nextRole = input.getAccessRole() != null ? input.getAccessRole() : existing.getAccessRole();
+        if (nextRole == null || !canActorAssignRole(actor, nextRole)) {
+            return ResponseEntity.<AppUserDto>badRequest().build();
+        }
+
+        HotelGroup assignedHotelGroup = resolveAssignedHotelGroup(input, existing, nextRole);
+        Hotel assignedHotel = resolveAssignedHotel(input, existing, nextRole);
+        if (!isValidManagedAssignment(nextRole, assignedHotelGroup, assignedHotel, input.getEmployeeRole(), existing.getEmployeeRole())) {
+            return ResponseEntity.<AppUserDto>badRequest().build();
+        }
+        if (!canActorManageAssignedScope(actor, nextRole, assignedHotelGroup, assignedHotel)) {
+            return ResponseEntity.<AppUserDto>badRequest().build();
+        }
+
+        existing.setAccessRole(nextRole);
+        existing.setAssignedHotelGroup(assignedHotelGroup);
+        existing.setAssignedHotel(assignedHotel);
+        existing.setEmployeeRole(nextRole == AccessRole.STAFF ? resolveManagedEmployeeRole(input, existing) : null);
+        existing.setActive(input.isActive());
+
+        AppUserStatus nextStatus = input.getStatus();
+        if (nextStatus == null || nextStatus == AppUserStatus.PENDING_APPROVAL) {
+            nextStatus = input.isActive() ? AppUserStatus.ACTIVE : AppUserStatus.DISABLED;
+        }
+        existing.setStatus(nextStatus);
+
         return ResponseEntity.ok(toDto(appUserRepository.save(existing)));
     }
 
@@ -201,6 +264,7 @@ public class AppUserController {
         if (!isValidApprovalRequest(input)) {
             return ResponseEntity.<AppUserDto>badRequest().build();
         }
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
 
         Optional<AppUser> existingOpt = appUserRepository.findById(id);
         if (existingOpt.isEmpty()) {
@@ -232,18 +296,34 @@ public class AppUserController {
             }
         }
 
+        if (!accessScopeService.canApprove(actor, existing, input, existing.getAssignedHotelGroup(), existing.getAssignedHotel())) {
+            return ResponseEntity.<AppUserDto>badRequest().build();
+        }
+
         existing.setStatus(AppUserStatus.ACTIVE);
         existing.setAccessRole(input.getAccessRole());
+        existing.setEmployeeRole(resolveEmployeeRole(input));
+        existing.setActive(input.getActive() == null || input.getActive());
         return ResponseEntity.ok(toDto(appUserRepository.save(existing)));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        if (!appUserRepository.existsById(id)) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        Optional<AppUser> target = appUserRepository.findById(id);
+        if (target.isEmpty() || !accessScopeService.canReadAppUser(actor, target.get())) {
             return ResponseEntity.notFound().build();
         }
         appUserRepository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private String currentFirebaseUid() {
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
+            return null;
+        }
+        return authentication.getName();
     }
 
     private boolean isValid(AppUserRegistrationRequest input) {
@@ -274,7 +354,15 @@ public class AppUserController {
             case SUPERADMIN -> input.getAssignedHotelGroupId() == null && input.getAssignedHotelId() == null;
             case HOTEL_GROUP_ADMIN, ADMIN ->
                     input.getAssignedHotelGroupId() != null && input.getAssignedHotelId() == null;
-            case HOTEL_ADMIN, STAFF -> input.getAssignedHotelId() != null;
+            case HOTEL_ADMIN -> input.getAssignedHotelId() != null;
+            case STAFF -> input.getAssignedHotelId() != null && input.getEmployeeRole() != null;
+        };
+    }
+
+    private EmployeeRole resolveEmployeeRole(AppUserApprovalRequest input) {
+        return switch (input.getAccessRole()) {
+            case SUPERADMIN, HOTEL_GROUP_ADMIN, HOTEL_ADMIN, ADMIN -> null;
+            case STAFF -> input.getEmployeeRole();
         };
     }
 
@@ -294,6 +382,93 @@ public class AppUserController {
         boolean hasGroup = hotelGroupCode != null && !hotelGroupCode.trim().isBlank();
         boolean hasHotel = hotelCode != null && !hotelCode.trim().isBlank();
         return hasGroup ^ hasHotel;
+    }
+
+    private boolean canActorAssignRole(AppUser actor, AccessRole role) {
+        if (accessScopeService.isSuperAdmin(actor)) {
+            return true;
+        }
+        if (accessScopeService.isHotelGroupAdmin(actor)) {
+            return role == AccessRole.HOTEL_ADMIN || role == AccessRole.STAFF;
+        }
+        return accessScopeService.isHotelAdmin(actor) && role == AccessRole.STAFF;
+    }
+
+    private HotelGroup resolveAssignedHotelGroup(AppUser input, AppUser existing, AccessRole role) {
+        if (role == AccessRole.SUPERADMIN) {
+            return null;
+        }
+        if (role == AccessRole.HOTEL_GROUP_ADMIN || role == AccessRole.ADMIN) {
+            Long groupId = input.getAssignedHotelGroup() != null ? input.getAssignedHotelGroup().getId() : null;
+            if (groupId == null && existing.getAssignedHotelGroup() != null) {
+                groupId = existing.getAssignedHotelGroup().getId();
+            }
+            return groupId == null ? null : hotelGroupRepository.findById(groupId).orElse(null);
+        }
+
+        Long hotelId = input.getAssignedHotel() != null ? input.getAssignedHotel().getId() : null;
+        if (hotelId == null && existing.getAssignedHotel() != null) {
+            hotelId = existing.getAssignedHotel().getId();
+        }
+        Hotel assignedHotel = hotelId == null ? null : hotelRepository.findById(hotelId).orElse(null);
+        return assignedHotel == null ? null : assignedHotel.getHotelGroup();
+    }
+
+    private Hotel resolveAssignedHotel(AppUser input, AppUser existing, AccessRole role) {
+        if (role == AccessRole.SUPERADMIN || role == AccessRole.HOTEL_GROUP_ADMIN || role == AccessRole.ADMIN) {
+            return null;
+        }
+        Long hotelId = input.getAssignedHotel() != null ? input.getAssignedHotel().getId() : null;
+        if (hotelId == null && existing.getAssignedHotel() != null) {
+            hotelId = existing.getAssignedHotel().getId();
+        }
+        return hotelId == null ? null : hotelRepository.findById(hotelId).orElse(null);
+    }
+
+    private boolean isValidManagedAssignment(
+            AccessRole role,
+            HotelGroup assignedHotelGroup,
+            Hotel assignedHotel,
+            EmployeeRole requestedEmployeeRole,
+            EmployeeRole existingEmployeeRole
+    ) {
+        return switch (role) {
+            case SUPERADMIN -> assignedHotelGroup == null && assignedHotel == null;
+            case HOTEL_GROUP_ADMIN, ADMIN -> assignedHotelGroup != null && assignedHotel == null;
+            case HOTEL_ADMIN -> assignedHotel != null;
+            case STAFF -> assignedHotel != null
+                    && (requestedEmployeeRole != null || existingEmployeeRole != null);
+        };
+    }
+
+    private boolean canActorManageAssignedScope(
+            AppUser actor,
+            AccessRole role,
+            HotelGroup assignedHotelGroup,
+            Hotel assignedHotel
+    ) {
+        if (accessScopeService.isSuperAdmin(actor)) {
+            return true;
+        }
+        if (accessScopeService.isHotelGroupAdmin(actor)) {
+            return (role == AccessRole.HOTEL_ADMIN || role == AccessRole.STAFF)
+                    && assignedHotel != null
+                    && actor.getAssignedHotelGroup() != null
+                    && assignedHotel.getHotelGroup() != null
+                    && actor.getAssignedHotelGroup().getId().equals(assignedHotel.getHotelGroup().getId());
+        }
+        return accessScopeService.isHotelAdmin(actor)
+                && role == AccessRole.STAFF
+                && assignedHotel != null
+                && actor.getAssignedHotel() != null
+                && actor.getAssignedHotel().getId().equals(assignedHotel.getId());
+    }
+
+    private EmployeeRole resolveManagedEmployeeRole(AppUser input, AppUser existing) {
+        if (input.getEmployeeRole() != null) {
+            return input.getEmployeeRole();
+        }
+        return existing.getEmployeeRole();
     }
 
     private AppUserDto toDto(AppUser user) {
@@ -349,6 +524,8 @@ public class AppUserController {
                 user.getPhone(),
                 user.getStatus(),
                 user.getAccessRole(),
+                user.getEmployeeRole(),
+                user.isActive(),
                 requestedHotelDto,
                 requestedHotelGroupDto,
                 assignedHotelGroupDto,

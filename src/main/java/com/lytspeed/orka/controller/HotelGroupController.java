@@ -2,9 +2,12 @@ package com.lytspeed.orka.controller;
 
 import com.lytspeed.orka.dto.HotelGroupDto;
 import com.lytspeed.orka.dto.HotelSummaryDto;
+import com.lytspeed.orka.entity.AppUser;
 import com.lytspeed.orka.entity.Hotel;
 import com.lytspeed.orka.entity.HotelGroup;
 import com.lytspeed.orka.repository.HotelGroupRepository;
+import com.lytspeed.orka.security.AccessScopeService;
+import com.lytspeed.orka.security.AuthenticatedAppUserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,33 +21,46 @@ import java.util.stream.Collectors;
 public class HotelGroupController {
 
     private final HotelGroupRepository hotelGroupRepository;
+    private final AuthenticatedAppUserService authenticatedAppUserService;
+    private final AccessScopeService accessScopeService;
 
-    public HotelGroupController(HotelGroupRepository hotelGroupRepository) {
+    public HotelGroupController(
+            HotelGroupRepository hotelGroupRepository,
+            AuthenticatedAppUserService authenticatedAppUserService,
+            AccessScopeService accessScopeService
+    ) {
         this.hotelGroupRepository = hotelGroupRepository;
+        this.authenticatedAppUserService = authenticatedAppUserService;
+        this.accessScopeService = accessScopeService;
     }
 
     @GetMapping
     public List<HotelGroupDto> getAll() {
-        return hotelGroupRepository.findAll().stream()
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        return accessScopeService.filterHotelGroups(actor, hotelGroupRepository.findAll()).stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<HotelGroupDto> getById(@PathVariable Long id) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         return hotelGroupRepository.findById(id)
+                .filter(group -> accessScopeService.canManageHotelGroup(actor, group))
                 .map(group -> ResponseEntity.ok(toDto(group)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping
     public HotelGroupDto create(@RequestBody HotelGroup hotelGroup) {
+        accessScopeService.requireSuperAdmin(authenticatedAppUserService.requireCurrentUser());
         hotelGroup.setCode(resolveOrGenerateCode(hotelGroup.getCode(), hotelGroup.getName()));
         return toDto(hotelGroupRepository.save(hotelGroup));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<HotelGroupDto> update(@PathVariable Long id, @RequestBody HotelGroup input) {
+        accessScopeService.requireSuperAdmin(authenticatedAppUserService.requireCurrentUser());
         return hotelGroupRepository.findById(id)
                 .map(existing -> {
                     existing.setName(input.getName());
@@ -56,6 +72,7 @@ public class HotelGroupController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
+        accessScopeService.requireSuperAdmin(authenticatedAppUserService.requireCurrentUser());
         if (!hotelGroupRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }

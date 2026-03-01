@@ -23,7 +23,7 @@ public class RequestDto {
     private LocalDateTime createdAt;
     private LocalDateTime acceptedAt;
     private LocalDateTime completedAt;
-    private EmployeeSummaryDto assignee;
+    private AppUserSummaryDto assignee;
     private Integer rating;
     private String comments;
 }

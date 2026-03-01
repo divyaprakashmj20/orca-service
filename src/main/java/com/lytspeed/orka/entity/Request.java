@@ -44,8 +44,8 @@ public class Request {
     private LocalDateTime completedAt;
 
     @ManyToOne
-    @JoinColumn(name = "assignee_id")
-    private Employee assignee;
+    @JoinColumn(name = "assignee_app_user_id")
+    private AppUser assignee;
 
     private Integer rating;
 

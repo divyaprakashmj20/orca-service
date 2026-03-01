@@ -2,10 +2,13 @@ package com.lytspeed.orka.controller;
 
 import com.lytspeed.orka.dto.HotelDto;
 import com.lytspeed.orka.dto.HotelGroupSummaryDto;
+import com.lytspeed.orka.entity.AppUser;
 import com.lytspeed.orka.entity.Hotel;
 import com.lytspeed.orka.entity.HotelGroup;
 import com.lytspeed.orka.repository.HotelGroupRepository;
 import com.lytspeed.orka.repository.HotelRepository;
+import com.lytspeed.orka.security.AccessScopeService;
+import com.lytspeed.orka.security.AuthenticatedAppUserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,30 +24,43 @@ public class HotelController {
 
     private final HotelRepository hotelRepository;
     private final HotelGroupRepository hotelGroupRepository;
+    private final AuthenticatedAppUserService authenticatedAppUserService;
+    private final AccessScopeService accessScopeService;
 
-    public HotelController(HotelRepository hotelRepository, HotelGroupRepository hotelGroupRepository) {
+    public HotelController(
+            HotelRepository hotelRepository,
+            HotelGroupRepository hotelGroupRepository,
+            AuthenticatedAppUserService authenticatedAppUserService,
+            AccessScopeService accessScopeService
+    ) {
         this.hotelRepository = hotelRepository;
         this.hotelGroupRepository = hotelGroupRepository;
+        this.authenticatedAppUserService = authenticatedAppUserService;
+        this.accessScopeService = accessScopeService;
     }
 
     @GetMapping
     public List<HotelDto> getAll() {
-        return hotelRepository.findAll().stream()
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        return accessScopeService.filterHotels(actor, hotelRepository.findAll()).stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<HotelDto> getById(@PathVariable Long id) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         return hotelRepository.findById(id)
+                .filter(hotel -> accessScopeService.canManageHotel(actor, hotel))
                 .map(hotel -> ResponseEntity.ok(toDto(hotel)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping
     public ResponseEntity<HotelDto> create(@RequestBody Hotel hotel) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         Optional<HotelGroup> group = resolveGroup(hotel.getHotelGroup());
-        if (group.isEmpty()) {
+        if (group.isEmpty() || !accessScopeService.canManageHotelGroup(actor, group.get())) {
             return ResponseEntity.badRequest().build();
         }
         hotel.setHotelGroup(group.get());
@@ -54,14 +70,18 @@ public class HotelController {
 
     @PutMapping("/{id}")
     public ResponseEntity<HotelDto> update(@PathVariable Long id, @RequestBody Hotel input) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         return hotelRepository.findById(id)
+                .filter(existing -> accessScopeService.canManageHotel(actor, existing))
                 .map(existing -> {
                     existing.setName(input.getName());
                     existing.setCode(resolveOrGenerateCode(input.getCode(), input.getName()));
                     existing.setCity(input.getCity());
                     existing.setCountry(input.getCountry());
                     Optional<HotelGroup> group = resolveGroup(input.getHotelGroup());
-                    group.ifPresent(existing::setHotelGroup);
+                    if (group.isPresent() && accessScopeService.canManageHotelGroup(actor, group.get())) {
+                        existing.setHotelGroup(group.get());
+                    }
                     return ResponseEntity.ok(toDto(hotelRepository.save(existing)));
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -69,7 +89,9 @@ public class HotelController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        if (!hotelRepository.existsById(id)) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        Optional<Hotel> hotel = hotelRepository.findById(id);
+        if (hotel.isEmpty() || !accessScopeService.canManageHotel(actor, hotel.get())) {
             return ResponseEntity.notFound().build();
         }
         hotelRepository.deleteById(id);

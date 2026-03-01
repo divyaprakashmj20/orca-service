@@ -2,6 +2,7 @@ package com.lytspeed.orka.dto;
 
 import com.lytspeed.orka.entity.enums.AccessRole;
 import com.lytspeed.orka.entity.enums.AppUserStatus;
+import com.lytspeed.orka.entity.enums.EmployeeRole;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,6 +22,8 @@ public class AppUserDto {
     private String phone;
     private AppUserStatus status;
     private AccessRole accessRole;
+    private EmployeeRole employeeRole;
+    private boolean active;
     private HotelSummaryDto requestedHotel;
     private HotelGroupSummaryDto requestedHotelGroup;
     private HotelGroupSummaryDto assignedHotelGroup;

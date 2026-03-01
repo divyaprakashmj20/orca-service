@@ -2,10 +2,13 @@ package com.lytspeed.orka.controller;
 
 import com.lytspeed.orka.dto.*;
 import com.lytspeed.orka.entity.*;
-import com.lytspeed.orka.repository.EmployeeRepository;
+import com.lytspeed.orka.entity.enums.AccessRole;
+import com.lytspeed.orka.repository.AppUserRepository;
 import com.lytspeed.orka.repository.HotelRepository;
 import com.lytspeed.orka.repository.RequestRepository;
 import com.lytspeed.orka.repository.RoomRepository;
+import com.lytspeed.orka.security.AccessScopeService;
+import com.lytspeed.orka.security.AuthenticatedAppUserService;
 import com.lytspeed.orka.service.FcmNotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,48 +25,60 @@ public class RequestController {
     private final RequestRepository requestRepository;
     private final HotelRepository hotelRepository;
     private final RoomRepository roomRepository;
-    private final EmployeeRepository employeeRepository;
+    private final AppUserRepository appUserRepository;
     private final FcmNotificationService fcmNotificationService;
+    private final AuthenticatedAppUserService authenticatedAppUserService;
+    private final AccessScopeService accessScopeService;
 
     public RequestController(
             RequestRepository requestRepository,
             HotelRepository hotelRepository,
             RoomRepository roomRepository,
-            EmployeeRepository employeeRepository,
-            FcmNotificationService fcmNotificationService
+            AppUserRepository appUserRepository,
+            FcmNotificationService fcmNotificationService,
+            AuthenticatedAppUserService authenticatedAppUserService,
+            AccessScopeService accessScopeService
     ) {
         this.requestRepository = requestRepository;
         this.hotelRepository = hotelRepository;
         this.roomRepository = roomRepository;
-        this.employeeRepository = employeeRepository;
+        this.appUserRepository = appUserRepository;
         this.fcmNotificationService = fcmNotificationService;
+        this.authenticatedAppUserService = authenticatedAppUserService;
+        this.accessScopeService = accessScopeService;
     }
 
     @GetMapping
     public List<RequestDto> getAll() {
-        return requestRepository.findAll().stream()
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        return accessScopeService.filterRequests(actor, requestRepository.findAll()).stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<RequestDto> getById(@PathVariable Long id) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         return requestRepository.findById(id)
+                .filter(request -> accessScopeService.canManageRequest(actor, request))
                 .map(request -> ResponseEntity.ok(toDto(request)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping
     public ResponseEntity<RequestDto> create(@RequestBody Request request) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         Optional<Hotel> hotel = resolveHotel(request.getHotel());
         Optional<Room> room = resolveRoom(request.getRoom());
-        Optional<Employee> assignee = resolveEmployee(request.getAssignee());
-        if (hotel.isEmpty() || room.isEmpty()) {
+        Optional<AppUser> assignee = resolveAppUser(request.getAssignee());
+        if (hotel.isEmpty() || room.isEmpty()
+                || !accessScopeService.canManageHotel(actor, hotel.get())
+                || !room.get().getHotel().getId().equals(hotel.get().getId())) {
             return ResponseEntity.badRequest().build();
         }
         request.setHotel(hotel.get());
         request.setRoom(room.get());
-        assignee.ifPresent(request::setAssignee);
+        request.setAssignee(assignee.orElse(null));
         Request saved = requestRepository.save(request);
         fcmNotificationService.notifyNewRequest(saved);
         return ResponseEntity.ok(toDto(saved));
@@ -71,15 +86,24 @@ public class RequestController {
 
     @PutMapping("/{id}")
     public ResponseEntity<RequestDto> update(@PathVariable Long id, @RequestBody Request input) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
         return requestRepository.findById(id)
+                .filter(existing -> accessScopeService.canManageRequest(actor, existing))
                 .map(existing -> {
                     Optional<Hotel> hotel = resolveHotel(input.getHotel());
                     Optional<Room> room = resolveRoom(input.getRoom());
-                    Optional<Employee> assignee = resolveEmployee(input.getAssignee());
+                    Optional<AppUser> assignee = resolveAppUser(input.getAssignee());
 
-                    hotel.ifPresent(existing::setHotel);
-                    room.ifPresent(existing::setRoom);
-                    assignee.ifPresent(existing::setAssignee);
+                    if (hotel.isPresent() && accessScopeService.canManageHotel(actor, hotel.get())) {
+                        existing.setHotel(hotel.get());
+                    }
+                    if (room.isPresent()
+                            && room.get().getHotel() != null
+                            && existing.getHotel() != null
+                            && room.get().getHotel().getId().equals(existing.getHotel().getId())) {
+                        existing.setRoom(room.get());
+                    }
+                    existing.setAssignee(input.getAssignee() == null ? null : assignee.orElse(null));
 
                     existing.setType(input.getType());
                     existing.setMessage(input.getMessage());
@@ -97,7 +121,9 @@ public class RequestController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        if (!requestRepository.existsById(id)) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        Optional<Request> request = requestRepository.findById(id);
+        if (request.isEmpty() || !accessScopeService.canManageRequest(actor, request.get())) {
             return ResponseEntity.notFound().build();
         }
         requestRepository.deleteById(id);
@@ -118,11 +144,15 @@ public class RequestController {
         return roomRepository.findById(room.getId());
     }
 
-    private Optional<Employee> resolveEmployee(Employee employee) {
-        if (employee == null || employee.getId() == null) {
+    private Optional<AppUser> resolveAppUser(AppUser appUser) {
+        if (appUser == null || appUser.getId() == null) {
             return Optional.empty();
         }
-        return employeeRepository.findById(employee.getId());
+        return appUserRepository.findById(appUser.getId())
+                .filter(AppUser::isActive)
+                .filter(user -> user.getAccessRole() == AccessRole.HOTEL_ADMIN
+                        || user.getAccessRole() == AccessRole.ADMIN
+                        || user.getAccessRole() == AccessRole.STAFF);
     }
 
     private RequestDto toDto(Request request) {
@@ -148,14 +178,15 @@ public class RequestController {
             );
         }
 
-        EmployeeSummaryDto assigneeDto = null;
+        AppUserSummaryDto assigneeDto = null;
         if (request.getAssignee() != null) {
-            Employee assignee = request.getAssignee();
-            assigneeDto = new EmployeeSummaryDto(
+            AppUser assignee = request.getAssignee();
+            assigneeDto = new AppUserSummaryDto(
                     assignee.getId(),
                     assignee.getName(),
-                    assignee.getRole(),
-                    assignee.getAccessRole()
+                    assignee.getEmployeeRole(),
+                    assignee.getAccessRole(),
+                    assignee.isActive()
             );
         }
 

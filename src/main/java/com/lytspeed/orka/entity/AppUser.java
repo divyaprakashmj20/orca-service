@@ -2,6 +2,7 @@ package com.lytspeed.orka.entity;
 
 import com.lytspeed.orka.entity.enums.AccessRole;
 import com.lytspeed.orka.entity.enums.AppUserStatus;
+import com.lytspeed.orka.entity.enums.EmployeeRole;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -45,6 +46,12 @@ public class AppUser {
 
     @Enumerated(EnumType.STRING)
     private AccessRole accessRole;
+
+    @Enumerated(EnumType.STRING)
+    private EmployeeRole employeeRole;
+
+    @Column(nullable = false)
+    private boolean active = true;
 
     @ManyToOne
     @JoinColumn(name = "requested_hotel_id")
