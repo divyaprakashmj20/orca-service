@@ -47,6 +47,10 @@ public class Request {
     @JoinColumn(name = "assignee_app_user_id")
     private AppUser assignee;
 
+    @ManyToOne
+    @JoinColumn(name = "guest_session_id")
+    private GuestSession guestSession;
+
     private Integer rating;
 
     @Column(length = 2000)

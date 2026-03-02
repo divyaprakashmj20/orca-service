@@ -32,6 +32,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/app-users/bootstrap-superadmin").permitAll()
                         .requestMatchers("/api/notifications/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/requests/guest/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/requests/guest/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(firebaseAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

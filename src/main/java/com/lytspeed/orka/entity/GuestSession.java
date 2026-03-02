@@ -6,27 +6,27 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
+
 @Entity
-@Table(name = "rooms",
-       uniqueConstraints = @UniqueConstraint(columnNames = {"hotel_id", "number"}))
+@Table(name = "guest_sessions")
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class Room {
+public class GuestSession {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String number;
-    private Integer floor;
-    @Column(name = "guest_access_token", unique = true, length = 120)
-    private String guestAccessToken;
+    @Column(name = "session_token", nullable = false, unique = true, length = 120)
+    private String sessionToken;
 
     @ManyToOne(optional = false)
-    @JoinColumn(name = "hotel_id")
-    private Hotel hotel;
+    @JoinColumn(name = "room_id")
+    private Room room;
 
-
+    private LocalDateTime createdAt;
+    private LocalDateTime lastSeenAt;
 }

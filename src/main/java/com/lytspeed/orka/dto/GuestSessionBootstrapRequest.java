@@ -9,10 +9,6 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class RoomDto {
-    private Long id;
-    private String number;
-    private Integer floor;
-    private String guestAccessToken;
-    private HotelSummaryDto hotel;
+public class GuestSessionBootstrapRequest {
+    private String sessionToken;
 }

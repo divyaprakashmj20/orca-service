@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
@@ -64,6 +65,7 @@ public class RoomController {
             return ResponseEntity.badRequest().build();
         }
         room.setHotel(hotel.get());
+        ensureGuestToken(room);
         return ResponseEntity.ok(toDto(roomRepository.save(room)));
     }
 
@@ -75,6 +77,9 @@ public class RoomController {
                 .map(existing -> {
                     existing.setNumber(input.getNumber());
                     existing.setFloor(input.getFloor());
+                    if (existing.getGuestAccessToken() == null || existing.getGuestAccessToken().isBlank()) {
+                        ensureGuestToken(existing);
+                    }
                     Optional<Hotel> hotel = resolveHotel(input.getHotel());
                     if (hotel.isPresent() && accessScopeService.canManageHotel(actor, hotel.get())) {
                         existing.setHotel(hotel.get());
@@ -118,7 +123,20 @@ public class RoomController {
                 room.getId(),
                 room.getNumber(),
                 room.getFloor(),
+                room.getGuestAccessToken(),
                 hotelDto
         );
+    }
+
+    private void ensureGuestToken(Room room) {
+        if (room.getGuestAccessToken() != null && !room.getGuestAccessToken().isBlank()) {
+            return;
+        }
+
+        String token;
+        do {
+            token = UUID.randomUUID().toString().replace("-", "");
+        } while (roomRepository.findByGuestAccessToken(token).isPresent());
+        room.setGuestAccessToken(token);
     }
 }

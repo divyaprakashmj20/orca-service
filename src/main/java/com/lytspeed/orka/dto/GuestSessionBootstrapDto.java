@@ -5,14 +5,14 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.List;
+
 @Getter
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-public class RoomDto {
-    private Long id;
-    private String number;
-    private Integer floor;
-    private String guestAccessToken;
-    private HotelSummaryDto hotel;
+public class GuestSessionBootstrapDto {
+    private String sessionToken;
+    private GuestRoomContextDto context;
+    private List<RequestDto> requests;
 }
