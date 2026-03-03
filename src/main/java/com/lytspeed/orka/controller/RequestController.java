@@ -226,7 +226,8 @@ public class RequestController {
         }
         return appUserRepository.findById(appUserId)
                 .filter(AppUser::isActive)
-                .filter(user -> user.getAccessRole() == AccessRole.HOTEL_ADMIN
+                .filter(user -> user.getAccessRole() == AccessRole.SUPERADMIN
+                        || user.getAccessRole() == AccessRole.HOTEL_ADMIN
                         || user.getAccessRole() == AccessRole.ADMIN
                         || user.getAccessRole() == AccessRole.STAFF);
     }
