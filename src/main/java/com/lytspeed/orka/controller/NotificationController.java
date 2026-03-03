@@ -3,10 +3,12 @@ package com.lytspeed.orka.controller;
 import com.lytspeed.orka.dto.TestNotificationRequest;
 import com.lytspeed.orka.service.FcmNotificationService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+@Transactional
 @RestController
 @RequestMapping("/api/notifications")
 @CrossOrigin

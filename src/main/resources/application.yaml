@@ -7,6 +7,7 @@ spring:
     password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: "org.postgresql.Driver"
   jpa:
+    open-in-view: false   # CRITICAL: prevents SSE connections holding a DB connection open for hours
     hibernate:
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO}
     show-sql: true

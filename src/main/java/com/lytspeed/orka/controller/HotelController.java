@@ -10,6 +10,7 @@ import com.lytspeed.orka.repository.HotelRepository;
 import com.lytspeed.orka.security.AccessScopeService;
 import com.lytspeed.orka.security.AuthenticatedAppUserService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,6 +18,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+@Transactional
 @RestController
 @RequestMapping("/api/hotels")
 @CrossOrigin

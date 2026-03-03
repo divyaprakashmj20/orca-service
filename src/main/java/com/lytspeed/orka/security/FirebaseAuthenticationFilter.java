@@ -26,23 +26,37 @@ public class FirebaseAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
+        String tokenValue = null;
+
+        // Primary: Authorization: Bearer <token> header (all normal API calls).
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (header != null && header.startsWith("Bearer ")) {
-            String token = header.substring(7).trim();
-            if (!token.isBlank()) {
-                try {
-                    FirebaseToken firebaseToken = FirebaseAuth.getInstance().verifyIdToken(token);
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    firebaseToken.getUid(),
-                                    null,
-                                    List.of()
-                            );
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                } catch (FirebaseAuthException ignored) {
-                    SecurityContextHolder.clearContext();
-                }
+            tokenValue = header.substring(7).trim();
+        }
+
+        // Fallback: ?token= query param for SSE connections.
+        // EventSource (browser / Capacitor WebView) cannot set custom request headers,
+        // so the Firebase ID token is passed as a query parameter instead.
+        if (tokenValue == null || tokenValue.isBlank()) {
+            String queryToken = request.getParameter("token");
+            if (queryToken != null && !queryToken.isBlank()) {
+                tokenValue = queryToken.trim();
+            }
+        }
+
+        if (tokenValue != null && !tokenValue.isBlank()) {
+            try {
+                FirebaseToken firebaseToken = FirebaseAuth.getInstance().verifyIdToken(tokenValue);
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                firebaseToken.getUid(),
+                                null,
+                                List.of()
+                        );
+                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            } catch (FirebaseAuthException ignored) {
+                SecurityContextHolder.clearContext();
             }
         }
 

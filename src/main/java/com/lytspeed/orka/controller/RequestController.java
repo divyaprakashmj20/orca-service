@@ -11,8 +11,12 @@ import com.lytspeed.orka.repository.RoomRepository;
 import com.lytspeed.orka.security.AccessScopeService;
 import com.lytspeed.orka.security.AuthenticatedAppUserService;
 import com.lytspeed.orka.service.FcmNotificationService;
+import com.lytspeed.orka.service.RequestSseService;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 import java.time.LocalDateTime;
@@ -21,6 +25,7 @@ import java.util.stream.Collectors;
 import java.util.Arrays;
 import java.util.UUID;
 
+@Transactional
 @RestController
 @RequestMapping("/api/requests")
 @CrossOrigin
@@ -34,6 +39,7 @@ public class RequestController {
     private final FcmNotificationService fcmNotificationService;
     private final AuthenticatedAppUserService authenticatedAppUserService;
     private final AccessScopeService accessScopeService;
+    private final RequestSseService sseService;
 
     public RequestController(
             RequestRepository requestRepository,
@@ -43,7 +49,8 @@ public class RequestController {
             GuestSessionRepository guestSessionRepository,
             FcmNotificationService fcmNotificationService,
             AuthenticatedAppUserService authenticatedAppUserService,
-            AccessScopeService accessScopeService
+            AccessScopeService accessScopeService,
+            RequestSseService sseService
     ) {
         this.requestRepository = requestRepository;
         this.hotelRepository = hotelRepository;
@@ -53,6 +60,22 @@ public class RequestController {
         this.fcmNotificationService = fcmNotificationService;
         this.authenticatedAppUserService = authenticatedAppUserService;
         this.accessScopeService = accessScopeService;
+        this.sseService = sseService;
+    }
+
+    /**
+     * SSE stream — one long-lived connection per authenticated client.
+     * Pushes a named "requests" event (JSON array of RequestDto scoped to the user)
+     * whenever any request is created, updated, or deleted.
+     *
+     * Authentication: Firebase ID token passed as ?token= query param
+     * (EventSource cannot set Authorization headers).
+     */
+    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream() {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        List<Request> all = requestRepository.findAll();
+        return sseService.registerAndSendInitial(actor, all);
     }
 
     @GetMapping
@@ -90,6 +113,7 @@ public class RequestController {
         applyWriteRequest(request, input);
         Request saved = requestRepository.save(request);
         fcmNotificationService.notifyNewRequest(saved);
+        sseService.broadcast(requestRepository.findAll());
         return ResponseEntity.ok(toDto(saved));
     }
 
@@ -165,6 +189,7 @@ public class RequestController {
 
         Request saved = requestRepository.save(request);
         fcmNotificationService.notifyNewRequest(saved);
+        sseService.broadcast(requestRepository.findAll());
         return ResponseEntity.ok(toDto(saved));
     }
 
@@ -190,7 +215,9 @@ public class RequestController {
                     existing.setAssignee(input.getAssigneeId() == null ? null : assignee.orElse(null));
                     applyWriteRequest(existing, input);
 
-                    return ResponseEntity.ok(toDto(requestRepository.save(existing)));
+                    Request saved = requestRepository.save(existing);
+                    sseService.broadcast(requestRepository.findAll());
+                    return ResponseEntity.ok(toDto(saved));
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -203,6 +230,7 @@ public class RequestController {
             return ResponseEntity.notFound().build();
         }
         requestRepository.deleteById(id);
+        sseService.broadcast(requestRepository.findAll());
         return ResponseEntity.noContent().build();
     }
 
@@ -226,7 +254,8 @@ public class RequestController {
         }
         return appUserRepository.findById(appUserId)
                 .filter(AppUser::isActive)
-                .filter(user -> user.getAccessRole() == AccessRole.HOTEL_ADMIN
+                .filter(user -> user.getAccessRole() == AccessRole.SUPERADMIN
+                        || user.getAccessRole() == AccessRole.HOTEL_ADMIN
                         || user.getAccessRole() == AccessRole.ADMIN
                         || user.getAccessRole() == AccessRole.STAFF);
     }

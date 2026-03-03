@@ -48,11 +48,13 @@ public class SecurityConfig {
                 "http://localhost",
                 "https://localhost",
                 "http://10.0.2.2:4200",
-                "https://orka-ui.duckdns.org"
+                "https://orka-ui.duckdns.org",
+                // Capacitor Android WebView origin (needed for SSE EventSource)
+                "capacitor://localhost"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
-        configuration.setExposedHeaders(List.of("Authorization"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Cache-Control"));
+        configuration.setExposedHeaders(List.of("Authorization", "Cache-Control", "X-Accel-Buffering"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
