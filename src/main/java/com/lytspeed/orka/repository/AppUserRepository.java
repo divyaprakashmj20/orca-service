@@ -17,4 +17,15 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
             AppUserStatus status,
             Collection<AccessRole> accessRoles
     );
+
+    List<AppUser> findByAssignedHotelGroupIdAndStatusAndAccessRoleIn(
+            Long hotelGroupId,
+            AppUserStatus status,
+            Collection<AccessRole> accessRoles
+    );
+
+    List<AppUser> findByStatusAndAccessRoleIn(
+            AppUserStatus status,
+            Collection<AccessRole> accessRoles
+    );
 }

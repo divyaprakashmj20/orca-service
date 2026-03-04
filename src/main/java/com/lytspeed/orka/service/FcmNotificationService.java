@@ -76,12 +76,38 @@ public class FcmNotificationService {
             return;
         }
 
-        List<AccessRole> roles = List.of(AccessRole.HOTEL_ADMIN, AccessRole.STAFF, AccessRole.ADMIN);
-        var recipients = appUserRepository.findByAssignedHotelIdAndStatusAndAccessRoleIn(
-                request.getHotel().getId(),
-                AppUserStatus.ACTIVE,
-                roles
-        ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled())).toList();
+        // Hotel-level recipients: HOTEL_ADMIN, STAFF, ADMIN assigned directly to this hotel
+        List<AccessRole> hotelRoles = List.of(AccessRole.HOTEL_ADMIN, AccessRole.STAFF, AccessRole.ADMIN);
+        List<com.lytspeed.orka.entity.AppUser> hotelRecipients = appUserRepository
+                .findByAssignedHotelIdAndStatusAndAccessRoleIn(
+                        request.getHotel().getId(),
+                        AppUserStatus.ACTIVE,
+                        hotelRoles
+                ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled())).toList();
+
+        // Hotel-group-level recipients: HOTEL_GROUP_ADMIN assigned to the hotel's group
+        List<com.lytspeed.orka.entity.AppUser> groupRecipients = List.of();
+        if (request.getHotel().getHotelGroup() != null && request.getHotel().getHotelGroup().getId() != null) {
+            groupRecipients = appUserRepository
+                    .findByAssignedHotelGroupIdAndStatusAndAccessRoleIn(
+                            request.getHotel().getHotelGroup().getId(),
+                            AppUserStatus.ACTIVE,
+                            List.of(AccessRole.HOTEL_GROUP_ADMIN)
+                    ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled())).toList();
+        }
+
+        // Superadmin recipients: all SUPERADMIN users (not hotel/group scoped)
+        List<com.lytspeed.orka.entity.AppUser> superAdminRecipients = appUserRepository
+                .findByStatusAndAccessRoleIn(
+                        AppUserStatus.ACTIVE,
+                        List.of(AccessRole.SUPERADMIN)
+                ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled())).toList();
+
+        List<com.lytspeed.orka.entity.AppUser> recipients = new ArrayList<>();
+        recipients.addAll(hotelRecipients);
+        recipients.addAll(groupRecipients);
+        recipients.addAll(superAdminRecipients);
+
         if (recipients.isEmpty()) {
             log.info("No active recipients found for request {} hotel {}", request.getId(), request.getHotel().getId());
             return;
