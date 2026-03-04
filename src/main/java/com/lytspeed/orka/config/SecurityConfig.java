@@ -1,6 +1,7 @@
 package com.lytspeed.orka.config;
 
 import com.lytspeed.orka.security.FirebaseAuthenticationFilter;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -29,6 +30,8 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Async dispatches (SSE broadcast re-entries) have no SecurityContext — skip them
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/app-users/bootstrap-superadmin").permitAll()
                         .requestMatchers("/api/notifications/health").permitAll()
