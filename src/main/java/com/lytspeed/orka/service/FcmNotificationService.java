@@ -81,7 +81,7 @@ public class FcmNotificationService {
                 request.getHotel().getId(),
                 AppUserStatus.ACTIVE,
                 roles
-        );
+        ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled())).toList();
         if (recipients.isEmpty()) {
             log.info("No active recipients found for request {} hotel {}", request.getId(), request.getHotel().getId());
             return;

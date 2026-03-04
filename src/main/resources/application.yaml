@@ -6,6 +6,9 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: "org.postgresql.Driver"
+  jackson:
+    deserialization:
+      fail-on-null-for-primitives: false
   jpa:
     open-in-view: false   # CRITICAL: prevents SSE connections holding a DB connection open for hours
     hibernate:

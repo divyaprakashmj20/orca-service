@@ -253,7 +253,7 @@ public class RequestController {
             return Optional.empty();
         }
         return appUserRepository.findById(appUserId)
-                .filter(AppUser::isActive)
+                .filter(user -> Boolean.TRUE.equals(user.getActive()))
                 .filter(user -> user.getAccessRole() == AccessRole.SUPERADMIN
                         || user.getAccessRole() == AccessRole.HOTEL_ADMIN
                         || user.getAccessRole() == AccessRole.ADMIN
@@ -302,7 +302,7 @@ public class RequestController {
                     assignee.getName(),
                     assignee.getEmployeeRole(),
                     assignee.getAccessRole(),
-                    assignee.isActive()
+                    Boolean.TRUE.equals(assignee.getActive())
             );
         }
 

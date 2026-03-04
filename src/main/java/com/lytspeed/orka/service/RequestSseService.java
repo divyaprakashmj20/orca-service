@@ -222,7 +222,7 @@ public class RequestSseService {
                     assignee.getName(),
                     assignee.getEmployeeRole(),
                     assignee.getAccessRole(),
-                    assignee.isActive()
+                    Boolean.TRUE.equals(assignee.getActive())
             );
         }
 

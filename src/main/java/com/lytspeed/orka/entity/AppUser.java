@@ -51,7 +51,7 @@ public class AppUser {
     private EmployeeRole employeeRole;
 
     @Column(nullable = false)
-    private boolean active = true;
+    private Boolean active = Boolean.TRUE;
 
     @ManyToOne
     @JoinColumn(name = "requested_hotel_id")
@@ -75,6 +75,10 @@ public class AppUser {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    /** Whether this account receives FCM push notifications. Defaults to true. */
+    @Column(name = "fcm_enabled", nullable = false, columnDefinition = "boolean default true")
+    private Boolean fcmEnabled = Boolean.TRUE;
+
     @PrePersist
     void prePersist() {
         LocalDateTime now = LocalDateTime.now();
@@ -83,10 +87,16 @@ public class AppUser {
         if (status == null) {
             status = AppUserStatus.PENDING_APPROVAL;
         }
+        if (fcmEnabled == null) {
+            fcmEnabled = Boolean.TRUE;
+        }
     }
 
     @PreUpdate
     void preUpdate() {
         updatedAt = LocalDateTime.now();
+        if (fcmEnabled == null) {
+            fcmEnabled = Boolean.TRUE;
+        }
     }
 }

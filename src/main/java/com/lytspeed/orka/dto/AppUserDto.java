@@ -23,11 +23,12 @@ public class AppUserDto {
     private AppUserStatus status;
     private AccessRole accessRole;
     private EmployeeRole employeeRole;
-    private boolean active;
+    private Boolean active;
     private HotelSummaryDto requestedHotel;
     private HotelGroupSummaryDto requestedHotelGroup;
     private HotelGroupSummaryDto assignedHotelGroup;
     private HotelSummaryDto assignedHotel;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Boolean fcmEnabled;
 }

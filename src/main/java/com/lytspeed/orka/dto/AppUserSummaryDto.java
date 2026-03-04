@@ -16,5 +16,5 @@ public class AppUserSummaryDto {
     private String name;
     private EmployeeRole employeeRole;
     private AccessRole accessRole;
-    private boolean active;
+    private Boolean active;
 }

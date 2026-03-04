@@ -2,6 +2,7 @@ package com.lytspeed.orka.controller;
 
 import com.lytspeed.orka.dto.AppUserDto;
 import com.lytspeed.orka.dto.AppUserApprovalRequest;
+import com.lytspeed.orka.dto.AppUserProfileUpdateRequest;
 import com.lytspeed.orka.dto.AppUserRegistrationRequest;
 import com.lytspeed.orka.dto.BootstrapSuperAdminRequest;
 import com.lytspeed.orka.dto.HotelGroupSummaryDto;
@@ -82,6 +83,30 @@ public class AppUserController {
         return ResponseEntity.ok(toDto(user.get()));
     }
 
+    /** Returns the authenticated user's own profile. */
+    @GetMapping("/me")
+    public ResponseEntity<AppUserDto> getMe() {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        return ResponseEntity.ok(toDto(actor));
+    }
+
+    /** Self-service update: name, phone, fcmEnabled only. */
+    @PutMapping("/me/profile")
+    public ResponseEntity<AppUserDto> updateMyProfile(@RequestBody AppUserProfileUpdateRequest input) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        if (input.getName() != null && !input.getName().trim().isBlank()) {
+            actor.setName(input.getName().trim());
+        }
+        if (input.getPhone() != null) {
+            String phone = input.getPhone().trim();
+            actor.setPhone(phone.isBlank() ? null : phone);
+        }
+        if (input.getFcmEnabled() != null) {
+            actor.setFcmEnabled(input.getFcmEnabled());
+        }
+        return ResponseEntity.ok(toDto(appUserRepository.save(actor)));
+    }
+
     @GetMapping("/pending")
     public List<AppUserDto> getPending() {
         AppUser actor = authenticatedAppUserService.requireCurrentUser();
@@ -155,6 +180,16 @@ public class AppUserController {
             user.setAssignedHotel(null);
         }
 
+        // Allow rejected users to re-apply
+        if (user.getStatus() == AppUserStatus.REJECTED) {
+            user.setStatus(AppUserStatus.PENDING_APPROVAL);
+            user.setActive(true);
+            user.setAccessRole(null);
+            user.setEmployeeRole(null);
+            user.setAssignedHotelGroup(null);
+            user.setAssignedHotel(null);
+        }
+
         if (isNew) {
             user.setStatus(AppUserStatus.PENDING_APPROVAL);
             user.setAccessRole(null);
@@ -199,6 +234,23 @@ public class AppUserController {
         user.setEmployeeRole(null);
         user.setActive(true);
 
+        return ResponseEntity.ok(toDto(appUserRepository.save(user)));
+    }
+
+    @PutMapping("/{id}/restore")
+    public ResponseEntity<AppUserDto> restore(@PathVariable Long id) {
+        AppUser actor = authenticatedAppUserService.requireCurrentUser();
+        Optional<AppUser> opt = appUserRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.<AppUserDto>notFound().build();
+        AppUser user = opt.get();
+        if (user.getStatus() != AppUserStatus.REJECTED) {
+            return ResponseEntity.<AppUserDto>badRequest().build();
+        }
+        if (!accessScopeService.canManagePendingUser(actor, user)) {
+            return ResponseEntity.<AppUserDto>status(403).build();
+        }
+        user.setStatus(AppUserStatus.PENDING_APPROVAL);
+        user.setActive(true);
         return ResponseEntity.ok(toDto(appUserRepository.save(user)));
     }
 
@@ -250,11 +302,11 @@ public class AppUserController {
         existing.setAssignedHotelGroup(assignedHotelGroup);
         existing.setAssignedHotel(assignedHotel);
         existing.setEmployeeRole(nextRole == AccessRole.STAFF ? resolveManagedEmployeeRole(input, existing) : null);
-        existing.setActive(input.isActive());
+        existing.setActive(Boolean.TRUE.equals(input.getActive()));
 
         AppUserStatus nextStatus = input.getStatus();
         if (nextStatus == null || nextStatus == AppUserStatus.PENDING_APPROVAL) {
-            nextStatus = input.isActive() ? AppUserStatus.ACTIVE : AppUserStatus.DISABLED;
+            nextStatus = Boolean.TRUE.equals(input.getActive()) ? AppUserStatus.ACTIVE : AppUserStatus.DISABLED;
         }
         existing.setStatus(nextStatus);
 
@@ -527,13 +579,14 @@ public class AppUserController {
                 user.getStatus(),
                 user.getAccessRole(),
                 user.getEmployeeRole(),
-                user.isActive(),
+                Boolean.TRUE.equals(user.getActive()),
                 requestedHotelDto,
                 requestedHotelGroupDto,
                 assignedHotelGroupDto,
                 assignedHotelDto,
                 user.getCreatedAt(),
-                user.getUpdatedAt()
+                user.getUpdatedAt(),
+                user.getFcmEnabled() != null ? user.getFcmEnabled() : Boolean.TRUE
         );
     }
 }
