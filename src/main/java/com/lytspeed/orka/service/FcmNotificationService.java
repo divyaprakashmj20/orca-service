@@ -1,12 +1,17 @@
 package com.lytspeed.orka.service;
 
 import com.google.firebase.ErrorCode;
+import com.google.firebase.messaging.AndroidConfig;
+import com.google.firebase.messaging.AndroidNotification;
+import com.google.firebase.messaging.ApnsConfig;
+import com.google.firebase.messaging.Aps;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.MulticastMessage;
 import com.google.firebase.messaging.Notification;
 import com.google.firebase.messaging.SendResponse;
+import com.google.firebase.messaging.WebpushConfig;
 import com.lytspeed.orka.entity.DeviceToken;
 import com.lytspeed.orka.entity.Request;
 import com.lytspeed.orka.entity.enums.AccessRole;
@@ -23,6 +28,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class FcmNotificationService {
+    private static final String ANDROID_HIGH_PRIORITY_CHANNEL_ID = "orka-high-priority";
+
 
     private static final Logger log = LoggerFactory.getLogger(FcmNotificationService.class);
 
@@ -50,6 +57,7 @@ public class FcmNotificationService {
             return;
         }
         Message.Builder builder = Message.builder().setToken(fcmToken);
+        applyHighPriorityDelivery(builder);
         if (title != null || body != null) {
             builder.setNotification(Notification.builder()
                     .setTitle(title)
@@ -170,6 +178,7 @@ public class FcmNotificationService {
         MulticastMessage.Builder builder = MulticastMessage.builder()
                 .addAllTokens(fcmTokens)
                 .setNotification(Notification.builder().setTitle(title).setBody(body).build());
+        applyHighPriorityDelivery(builder);
         if (data != null && !data.isEmpty()) {
             builder.putAllData(data);
         }
@@ -210,5 +219,45 @@ public class FcmNotificationService {
             token.setLastSeenAt(LocalDateTime.now());
             deviceTokenRepository.save(token);
         });
+    }
+
+    private void applyHighPriorityDelivery(Message.Builder builder) {
+        builder
+                .setAndroidConfig(buildAndroidHighPriorityConfig())
+                .setApnsConfig(buildApnsHighPriorityConfig())
+                .setWebpushConfig(buildWebpushHighPriorityConfig());
+    }
+
+    private void applyHighPriorityDelivery(MulticastMessage.Builder builder) {
+        builder
+                .setAndroidConfig(buildAndroidHighPriorityConfig())
+                .setApnsConfig(buildApnsHighPriorityConfig())
+                .setWebpushConfig(buildWebpushHighPriorityConfig());
+    }
+
+    private AndroidConfig buildAndroidHighPriorityConfig() {
+        return AndroidConfig.builder()
+                .setPriority(AndroidConfig.Priority.HIGH)
+            .setNotification(AndroidNotification.builder()
+                .setChannelId(ANDROID_HIGH_PRIORITY_CHANNEL_ID)
+                .setSound("default")
+                .build())
+                .build();
+    }
+
+    private ApnsConfig buildApnsHighPriorityConfig() {
+        return ApnsConfig.builder()
+                .putHeader("apns-priority", "10")
+                .putHeader("apns-push-type", "alert")
+                .setAps(Aps.builder()
+                        .setSound("default")
+                        .build())
+                .build();
+    }
+
+    private WebpushConfig buildWebpushHighPriorityConfig() {
+        return WebpushConfig.builder()
+                .putHeader("Urgency", "high")
+                .build();
     }
 }
