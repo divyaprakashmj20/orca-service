@@ -12,3 +12,7 @@ firebase:
   admin:
     credentials:
       path: ".secrets/firebase-admin-sdk.json"
+
+orka:
+  guest:
+    session-ttl: "PT1H"

@@ -1,5 +1,6 @@
 package com.lytspeed.orka.controller;
 
+import com.lytspeed.orka.config.OrkaGuestProperties;
 import com.lytspeed.orka.dto.*;
 import com.lytspeed.orka.entity.*;
 import com.lytspeed.orka.entity.enums.AccessRole;
@@ -12,12 +13,14 @@ import com.lytspeed.orka.security.AccessScopeService;
 import com.lytspeed.orka.security.AuthenticatedAppUserService;
 import com.lytspeed.orka.service.FcmNotificationService;
 import com.lytspeed.orka.service.RequestSseService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.time.Duration;
 import java.util.List;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -40,6 +43,7 @@ public class RequestController {
     private final AuthenticatedAppUserService authenticatedAppUserService;
     private final AccessScopeService accessScopeService;
     private final RequestSseService sseService;
+    private final OrkaGuestProperties orkaGuestProperties;
 
     public RequestController(
             RequestRepository requestRepository,
@@ -50,7 +54,8 @@ public class RequestController {
             FcmNotificationService fcmNotificationService,
             AuthenticatedAppUserService authenticatedAppUserService,
             AccessScopeService accessScopeService,
-            RequestSseService sseService
+            RequestSseService sseService,
+            OrkaGuestProperties orkaGuestProperties
     ) {
         this.requestRepository = requestRepository;
         this.hotelRepository = hotelRepository;
@@ -61,6 +66,7 @@ public class RequestController {
         this.authenticatedAppUserService = authenticatedAppUserService;
         this.accessScopeService = accessScopeService;
         this.sseService = sseService;
+        this.orkaGuestProperties = orkaGuestProperties;
     }
 
     /**
@@ -132,7 +138,18 @@ public class RequestController {
     ) {
         return roomRepository.findByGuestAccessToken(token)
                 .map(room -> {
-                    GuestSession session = resolveOrCreateGuestSession(room, input == null ? null : input.getSessionToken());
+                String sessionToken = input == null ? null : input.getSessionToken();
+                Optional<GuestSession> existingSession = findGuestSession(room, sessionToken);
+
+                if (sessionToken != null && !sessionToken.isBlank()) {
+                if (existingSession.isEmpty() || isGuestSessionExpired(existingSession.get())) {
+                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).<GuestSessionBootstrapDto>build();
+                }
+                }
+
+                GuestSession session = existingSession
+                    .map(this::touchGuestSession)
+                    .orElseGet(() -> createGuestSession(room));
                     List<RequestDto> requests = requestRepository.findByGuestSessionIdOrderByCreatedAtDesc(session.getId())
                             .stream()
                             .map(this::toDto)
@@ -140,6 +157,7 @@ public class RequestController {
 
                     return ResponseEntity.ok(new GuestSessionBootstrapDto(
                             session.getSessionToken(),
+                    guestSessionExpiresAt(session),
                             toGuestRoomContext(room),
                             requests
                     ));
@@ -166,12 +184,11 @@ public class RequestController {
                         && existing.getRoom().getId() != null
                         && existing.getRoom().getId().equals(room.get().getId()));
 
-        if (session.isEmpty()) {
-            return ResponseEntity.badRequest().build();
+        if (session.isEmpty() || isGuestSessionExpired(session.get())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        session.get().setLastSeenAt(LocalDateTime.now());
-        guestSessionRepository.save(session.get());
+        GuestSession activeSession = touchGuestSession(session.get());
 
         Request request = new Request();
         request.setHotel(room.get().getHotel());
@@ -183,7 +200,7 @@ public class RequestController {
         request.setAcceptedAt(null);
         request.setCompletedAt(null);
         request.setAssignee(null);
-        request.setGuestSession(session.get());
+        request.setGuestSession(activeSession);
         request.setRating(null);
         request.setComments(null);
 
@@ -360,25 +377,44 @@ public class RequestController {
         );
     }
 
-    private GuestSession resolveOrCreateGuestSession(Room room, String sessionToken) {
-        if (sessionToken != null && !sessionToken.isBlank()) {
-            Optional<GuestSession> existing = guestSessionRepository.findBySessionToken(sessionToken)
-                    .filter(session -> session.getRoom() != null
-                            && session.getRoom().getId() != null
-                            && session.getRoom().getId().equals(room.getId()));
-            if (existing.isPresent()) {
-                GuestSession session = existing.get();
-                session.setLastSeenAt(LocalDateTime.now());
-                return guestSessionRepository.save(session);
-            }
+    private Optional<GuestSession> findGuestSession(Room room, String sessionToken) {
+        if (sessionToken == null || sessionToken.isBlank()) {
+            return Optional.empty();
         }
+        return guestSessionRepository.findBySessionToken(sessionToken)
+                .filter(session -> session.getRoom() != null
+                        && session.getRoom().getId() != null
+                        && session.getRoom().getId().equals(room.getId()));
+    }
 
+    private GuestSession createGuestSession(Room room) {
         GuestSession session = new GuestSession();
         session.setRoom(room);
         session.setSessionToken(generateGuestSessionToken());
         session.setCreatedAt(LocalDateTime.now());
         session.setLastSeenAt(LocalDateTime.now());
         return guestSessionRepository.save(session);
+    }
+
+    private GuestSession touchGuestSession(GuestSession session) {
+        session.setLastSeenAt(LocalDateTime.now());
+        return guestSessionRepository.save(session);
+    }
+
+    private boolean isGuestSessionExpired(GuestSession session) {
+        return !guestSessionExpiresAt(session).isAfter(LocalDateTime.now());
+    }
+
+    private LocalDateTime guestSessionExpiresAt(GuestSession session) {
+        LocalDateTime createdAt = session.getCreatedAt() != null
+                ? session.getCreatedAt()
+                : session.getLastSeenAt();
+
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+
+        return createdAt.plus(orkaGuestProperties.getSessionTtl());
     }
 
     private String generateGuestSessionToken() {
