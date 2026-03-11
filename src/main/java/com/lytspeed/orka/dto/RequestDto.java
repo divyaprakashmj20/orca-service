@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class RequestDto {
     private Long id;
+    private Long version;
     private HotelSummaryDto hotel;
     private RoomSummaryDto room;
     private RequestType type;

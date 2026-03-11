@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 public class RequestWriteRequest {
     private Long hotelId;
     private Long roomId;
+    private Long version;
     private RequestType type;
     private String message;
     private RequestStatus status;

@@ -216,6 +216,11 @@ public class RequestController {
         return requestRepository.findById(id)
                 .filter(existing -> accessScopeService.canManageRequest(actor, existing))
                 .map(existing -> {
+                    if (input.getVersion() == null || existing.getVersion() == null
+                            || !existing.getVersion().equals(input.getVersion())) {
+                        return ResponseEntity.status(HttpStatus.CONFLICT).<RequestDto>build();
+                    }
+
                     Optional<Hotel> hotel = resolveHotel(input.getHotelId());
                     Optional<Room> room = resolveRoom(input.getRoomId());
                     Optional<AppUser> assignee = resolveAppUser(input.getAssigneeId());
@@ -325,6 +330,7 @@ public class RequestController {
 
         return new RequestDto(
                 request.getId(),
+            request.getVersion(),
                 hotelDto,
                 roomDto,
                 request.getType(),

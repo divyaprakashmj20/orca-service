@@ -228,6 +228,7 @@ public class RequestSseService {
 
         return new RequestDto(
                 request.getId(),
+            request.getVersion(),
                 hotelDto,
                 roomDto,
                 request.getType(),

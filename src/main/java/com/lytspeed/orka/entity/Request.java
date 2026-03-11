@@ -22,6 +22,9 @@ public class Request {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    private Long version;
+
     @ManyToOne(optional = false)
     @JoinColumn(name = "hotel_id")
     private Hotel hotel;
