@@ -277,6 +277,7 @@ public class RequestController {
         return appUserRepository.findById(appUserId)
                 .filter(user -> Boolean.TRUE.equals(user.getActive()))
                 .filter(user -> user.getAccessRole() == AccessRole.SUPERADMIN
+                || user.getAccessRole() == AccessRole.HOTEL_GROUP_ADMIN
                         || user.getAccessRole() == AccessRole.HOTEL_ADMIN
                         || user.getAccessRole() == AccessRole.ADMIN
                         || user.getAccessRole() == AccessRole.STAFF);
