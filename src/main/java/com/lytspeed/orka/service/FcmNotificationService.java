@@ -76,14 +76,102 @@ public class FcmNotificationService {
     }
 
     public void notifyNewRequest(Request request) {
+        String roomNumber = request.getRoom() != null ? request.getRoom().getNumber() : null;
+        String title = "New service request";
+        String body = roomNumber == null || roomNumber.isBlank()
+            ? "A new guest request is waiting"
+            : "Room " + roomNumber + " has a new request";
+
+        Map<String, String> data = new HashMap<>();
+        data.put("eventType", "NEW_REQUEST");
+        data.put("requestId", String.valueOf(request.getId()));
+        if (request.getHotel() != null && request.getHotel().getId() != null) {
+            data.put("hotelId", String.valueOf(request.getHotel().getId()));
+        }
+        if (request.getRoom() != null && request.getRoom().getId() != null) {
+            data.put("roomId", String.valueOf(request.getRoom().getId()));
+        }
+        if (request.getType() != null) {
+            data.put("requestType", request.getType().name());
+        }
+
+        notifyRequestRecipients(request, title, body, data);
+    }
+
+    public void notifyPendingRequestReminder(Request request, long reminderIntervalMinutes) {
+        if (request == null || request.getId() == null) {
+            return;
+        }
+
+        String roomNumber = request.getRoom() != null ? request.getRoom().getNumber() : null;
+        String title = "Pending request reminder";
+        String body = roomNumber == null || roomNumber.isBlank()
+                ? "A guest request is still pending and needs attention"
+                : "Room " + roomNumber + " still has a pending request";
+
+        Map<String, String> data = new HashMap<>();
+        data.put("eventType", "PENDING_REQUEST_REMINDER");
+        data.put("requestId", String.valueOf(request.getId()));
+        data.put("reminderIntervalMinutes", String.valueOf(reminderIntervalMinutes));
+        if (request.getHotel() != null && request.getHotel().getId() != null) {
+            data.put("hotelId", String.valueOf(request.getHotel().getId()));
+        }
+        if (request.getRoom() != null && request.getRoom().getId() != null) {
+            data.put("roomId", String.valueOf(request.getRoom().getId()));
+        }
+        if (request.getType() != null) {
+            data.put("requestType", request.getType().name());
+        }
+
+        notifyRequestRecipients(request, title, body, data);
+    }
+
+    public void notifyAcceptedRequestReminder(Request request, long reminderIntervalMinutes) {
+        if (request == null || request.getId() == null) {
+            return;
+        }
+
+        String roomNumber = request.getRoom() != null ? request.getRoom().getNumber() : null;
+        String title = "Accepted request reminder";
+        String body = roomNumber == null || roomNumber.isBlank()
+                ? "An accepted guest request is still not completed"
+                : "Room " + roomNumber + " has an accepted request that is still not completed";
+
+        Map<String, String> data = new HashMap<>();
+        data.put("eventType", "ACCEPTED_REQUEST_REMINDER");
+        data.put("requestId", String.valueOf(request.getId()));
+        data.put("reminderIntervalMinutes", String.valueOf(reminderIntervalMinutes));
+        if (request.getHotel() != null && request.getHotel().getId() != null) {
+            data.put("hotelId", String.valueOf(request.getHotel().getId()));
+        }
+        if (request.getRoom() != null && request.getRoom().getId() != null) {
+            data.put("roomId", String.valueOf(request.getRoom().getId()));
+        }
+        if (request.getType() != null) {
+            data.put("requestType", request.getType().name());
+        }
+
+        notifyRequestRecipients(request, title, body, data);
+    }
+
+    private void notifyRequestRecipients(Request request, String title, String body, Map<String, String> data) {
         if (request == null || request.getId() == null || request.getHotel() == null || request.getHotel().getId() == null) {
             return;
         }
         if (firebaseMessaging.isEmpty()) {
-            log.info("FCM disabled; skipping notifyNewRequest for request {}", request.getId());
+            log.info("FCM disabled; skipping request notification for request {}", request.getId());
             return;
         }
 
+        List<String> fcmTokens = resolveRecipientTokens(request);
+        if (fcmTokens.isEmpty()) {
+            return;
+        }
+
+        sendMulticast(fcmTokens, title, body, data);
+    }
+
+    private List<String> resolveRecipientTokens(Request request) {
         // Hotel-level recipients: HOTEL_ADMIN, STAFF, ADMIN assigned directly to this hotel
         List<AccessRole> hotelRoles = List.of(AccessRole.HOTEL_ADMIN, AccessRole.STAFF, AccessRole.ADMIN);
         List<com.lytspeed.orka.entity.AppUser> hotelRecipients = appUserRepository
@@ -93,7 +181,6 @@ public class FcmNotificationService {
                         hotelRoles
                 ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled())).toList();
 
-        // Hotel-group-level recipients: HOTEL_GROUP_ADMIN assigned to the hotel's group
         List<com.lytspeed.orka.entity.AppUser> groupRecipients = List.of();
         if (request.getHotel().getHotelGroup() != null && request.getHotel().getHotelGroup().getId() != null) {
             groupRecipients = appUserRepository
@@ -104,7 +191,6 @@ public class FcmNotificationService {
                     ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled())).toList();
         }
 
-        // Superadmin recipients: all SUPERADMIN users (not hotel/group scoped)
         List<com.lytspeed.orka.entity.AppUser> superAdminRecipients = appUserRepository
                 .findByStatusAndAccessRoleIn(
                         AppUserStatus.ACTIVE,
@@ -118,7 +204,7 @@ public class FcmNotificationService {
 
         if (recipients.isEmpty()) {
             log.info("No active recipients found for request {} hotel {}", request.getId(), request.getHotel().getId());
-            return;
+            return List.of();
         }
 
         Set<Long> appUserIds = recipients.stream()
@@ -134,41 +220,16 @@ public class FcmNotificationService {
 
         if (tokens.isEmpty()) {
             log.info("No active device tokens for request {} recipients", request.getId());
-            return;
+            return List.of();
         }
 
-        List<String> fcmTokens = tokens.stream()
+        return tokens.stream()
                 .map(DeviceToken::getFcmToken)
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
                 .distinct()
                 .toList();
-
-        if (fcmTokens.isEmpty()) {
-            return;
-        }
-
-        String roomNumber = request.getRoom() != null ? request.getRoom().getNumber() : null;
-        String title = "New service request";
-        String body = roomNumber == null || roomNumber.isBlank()
-                ? "A new guest request is waiting"
-                : "Room " + roomNumber + " has a new request";
-
-        Map<String, String> data = new HashMap<>();
-        data.put("eventType", "NEW_REQUEST");
-        data.put("requestId", String.valueOf(request.getId()));
-        if (request.getHotel() != null && request.getHotel().getId() != null) {
-            data.put("hotelId", String.valueOf(request.getHotel().getId()));
-        }
-        if (request.getRoom() != null && request.getRoom().getId() != null) {
-            data.put("roomId", String.valueOf(request.getRoom().getId()));
-        }
-        if (request.getType() != null) {
-            data.put("requestType", request.getType().name());
-        }
-
-        sendMulticast(fcmTokens, title, body, data);
     }
 
     private void sendMulticast(List<String> fcmTokens, String title, String body, Map<String, String> data) {

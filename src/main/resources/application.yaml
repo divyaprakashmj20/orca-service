@@ -24,3 +24,7 @@ server:
 orka:
   guest:
     session-ttl: ${ORKA_GUEST_SESSION_TTL:PT1H}
+  notifications:
+    pending-reminder:
+      enabled: ${ORKA_PENDING_REQUEST_REMINDER_ENABLED:true}
+      interval: ${ORKA_PENDING_REQUEST_REMINDER_INTERVAL:PT15M}

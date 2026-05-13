@@ -16,3 +16,7 @@ firebase:
 orka:
   guest:
     session-ttl: "PT1H"
+  notifications:
+    pending-reminder:
+      enabled: true
+      interval: "PT15M"
