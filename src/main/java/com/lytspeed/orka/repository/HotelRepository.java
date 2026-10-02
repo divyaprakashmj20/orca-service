@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
+@org.springframework.data.rest.core.annotation.RepositoryRestResource(exported = false)
 public interface HotelRepository extends JpaRepository<Hotel, Long> {
     boolean existsByCodeIgnoreCase(String code);
     Optional<Hotel> findByCodeIgnoreCase(String code);

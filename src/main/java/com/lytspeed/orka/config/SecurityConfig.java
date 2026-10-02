@@ -1,6 +1,10 @@
 package com.lytspeed.orka.config;
 
 import com.lytspeed.orka.security.FirebaseAuthenticationFilter;
+import com.lytspeed.orka.security.ProductAccessFilter;
+import com.lytspeed.orka.security.AccessScopeService;
+import com.lytspeed.orka.security.ApiAccessFailure;
+import com.lytspeed.orka.repository.AppUserRepository;
 import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,22 +28,30 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, AppUserRepository users, AccessScopeService scopes) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(errors -> errors
+                        .authenticationEntryPoint((request, response, failure) -> ApiAccessFailure.AUTHENTICATION_REQUIRED.write(response))
+                        .accessDeniedHandler((request, response, failure) -> ApiAccessFailure.ACCESS_DENIED.write(response)))
                 .authorizeHttpRequests(auth -> auth
                         // Async dispatches (SSE broadcast re-entries) have no SecurityContext — skip them
                         .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/app-users/bootstrap-superadmin").permitAll()
+                        .requestMatchers("/api/app-users/bootstrap-superadmin").denyAll()
                         .requestMatchers("/api/notifications/health").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/requests/guest/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/requests/guest/**").permitAll()
-                        .anyRequest().authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/food/guest/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/branding/guest/**").permitAll()
+                        .requestMatchers("/api/**").authenticated()
+                        .anyRequest().denyAll()
                 )
-                .addFilterBefore(firebaseAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(firebaseAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new com.lytspeed.orka.security.RequestBoundsFilter(), FirebaseAuthenticationFilter.class)
+                .addFilterAfter(new ProductAccessFilter(users, scopes), FirebaseAuthenticationFilter.class);
         return http.build();
     }
 
@@ -48,6 +60,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:4200",
+                "http://localhost:4203",
                 "http://localhost",
                 "https://localhost",
                 "http://10.0.2.2:4200",

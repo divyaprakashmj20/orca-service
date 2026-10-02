@@ -58,7 +58,7 @@ public class AppUserController {
     public List<AppUserDto> getAll() {
         AppUser actor = authenticatedAppUserService.requireCurrentUser();
         return appUserRepository.findAll().stream()
-                .filter(user -> accessScopeService.canReadAppUser(actor, user))
+                .filter(user -> accessScopeService.canReadAppUser(actor, user) || ((user.getStatus() == AppUserStatus.REJECTED || user.getStatus() == AppUserStatus.PENDING_APPROVAL) && accessScopeService.canManagePendingUser(actor, user)))
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
@@ -130,6 +130,8 @@ public class AppUserController {
 
         String firebaseUid = input.getFirebaseUid().trim();
         String email = normalizeEmail(input.getEmail());
+        var tokenDetails = SecurityContextHolder.getContext().getAuthentication().getDetails();
+        if (!(tokenDetails instanceof com.google.firebase.auth.FirebaseToken verified) || verified.getEmail() == null || !email.equalsIgnoreCase(verified.getEmail())) return ResponseEntity.badRequest().build();
         String name = input.getName().trim();
         String phone = input.getPhone() == null ? null : input.getPhone().trim();
         String hotelGroupCode = normalizeHotelCode(input.getHotelGroupCode());
@@ -162,8 +164,10 @@ public class AppUserController {
             return ResponseEntity.<AppUserDto>badRequest().build();
         }
 
-        AppUser user = byUid.or(() -> byEmail).orElseGet(AppUser::new);
+        if (byEmail.isPresent() && !firebaseUid.equals(byEmail.get().getFirebaseUid())) return ResponseEntity.badRequest().build();
+        AppUser user = byUid.orElseGet(AppUser::new);
         boolean isNew = user.getId() == null;
+        if (!isNew && user.getStatus() != AppUserStatus.PENDING_APPROVAL && user.getStatus() != AppUserStatus.REJECTED) return ResponseEntity.status(403).build();
 
         user.setFirebaseUid(firebaseUid);
         user.setEmail(email);
@@ -272,17 +276,10 @@ public class AppUserController {
             return ResponseEntity.ok(toDto(appUserRepository.save(existing)));
         }
 
-        if (!accessScopeService.canReadAppUser(actor, existing)) {
+        if (!accessScopeService.canReadAppUser(actor, existing) || !canActorAssignRole(actor, existing.getAccessRole())) {
             return ResponseEntity.<AppUserDto>notFound().build();
         }
 
-        if (input.getName() != null && !input.getName().trim().isBlank()) {
-            existing.setName(input.getName().trim());
-        }
-        if (input.getPhone() != null) {
-            String phone = input.getPhone().trim();
-            existing.setPhone(phone.isBlank() ? null : phone);
-        }
 
         AccessRole nextRole = input.getAccessRole() != null ? input.getAccessRole() : existing.getAccessRole();
         if (nextRole == null || !canActorAssignRole(actor, nextRole)) {
@@ -298,13 +295,21 @@ public class AppUserController {
             return ResponseEntity.<AppUserDto>badRequest().build();
         }
 
+        if (input.getName() != null && !input.getName().trim().isBlank()) {
+            existing.setName(input.getName().trim());
+        }
+        if (input.getPhone() != null) {
+            String phone = input.getPhone().trim();
+            existing.setPhone(phone.isBlank() ? null : phone);
+        }
+
         existing.setAccessRole(nextRole);
         existing.setAssignedHotelGroup(assignedHotelGroup);
         existing.setAssignedHotel(assignedHotel);
         existing.setEmployeeRole(nextRole == AccessRole.STAFF ? resolveManagedEmployeeRole(input, existing) : null);
         existing.setActive(Boolean.TRUE.equals(input.getActive()));
 
-        AppUserStatus nextStatus = input.getStatus();
+        AppUserStatus nextStatus = Boolean.TRUE.equals(input.getActive()) ? AppUserStatus.ACTIVE : AppUserStatus.DISABLED;
         if (nextStatus == null || nextStatus == AppUserStatus.PENDING_APPROVAL) {
             nextStatus = Boolean.TRUE.equals(input.getActive()) ? AppUserStatus.ACTIVE : AppUserStatus.DISABLED;
         }
@@ -327,32 +332,21 @@ public class AppUserController {
 
         AppUser existing = existingOpt.get();
 
+        if (existing.getStatus() != AppUserStatus.PENDING_APPROVAL || Boolean.FALSE.equals(input.getActive())) return ResponseEntity.badRequest().build();
+        HotelGroup assignedGroup = null;
+        Hotel assignedHotel = null;
         switch (input.getAccessRole()) {
-            case SUPERADMIN -> {
-                existing.setAssignedHotelGroup(null);
-                existing.setAssignedHotel(null);
-            }
-            case HOTEL_GROUP_ADMIN, ADMIN -> {
-                Optional<HotelGroup> assignedGroup = hotelGroupRepository.findById(input.getAssignedHotelGroupId());
-                if (assignedGroup.isEmpty()) {
-                    return ResponseEntity.<AppUserDto>badRequest().build();
-                }
-                existing.setAssignedHotelGroup(assignedGroup.get());
-                existing.setAssignedHotel(null);
-            }
+            case SUPERADMIN -> { }
+            case HOTEL_GROUP_ADMIN, ADMIN -> assignedGroup = hotelGroupRepository.findById(input.getAssignedHotelGroupId()).orElse(null);
             case HOTEL_ADMIN, STAFF -> {
-                Optional<Hotel> assignedHotel = hotelRepository.findById(input.getAssignedHotelId());
-                if (assignedHotel.isEmpty()) {
-                    return ResponseEntity.<AppUserDto>badRequest().build();
-                }
-                existing.setAssignedHotel(assignedHotel.get());
-                existing.setAssignedHotelGroup(assignedHotel.get().getHotelGroup());
+                assignedHotel = hotelRepository.findById(input.getAssignedHotelId()).orElse(null);
+                if (assignedHotel != null) assignedGroup = assignedHotel.getHotelGroup();
             }
         }
-
-        if (!accessScopeService.canApprove(actor, existing, input, existing.getAssignedHotelGroup(), existing.getAssignedHotel())) {
-            return ResponseEntity.<AppUserDto>badRequest().build();
-        }
+        if (!isValidManagedAssignment(input.getAccessRole(), assignedGroup, assignedHotel, input.getEmployeeRole(), null)
+                || !accessScopeService.canApprove(actor, existing, input, assignedGroup, assignedHotel)) return ResponseEntity.badRequest().build();
+        existing.setAssignedHotelGroup(assignedGroup);
+        existing.setAssignedHotel(assignedHotel);
 
         existing.setStatus(AppUserStatus.ACTIVE);
         existing.setAccessRole(input.getAccessRole());

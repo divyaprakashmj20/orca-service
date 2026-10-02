@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/postgres?currentSchema=orka_product_test
+    username: postgres
+    password: ${ORKA_TEST_DB_PASSWORD:password}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+server:
+  address: 127.0.0.1
+  port: 8083
+orka:
+  notifications:
+    pending-reminder:
+      enabled: false

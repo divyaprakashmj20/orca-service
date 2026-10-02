@@ -55,6 +55,7 @@ public class HotelGroupController {
 
     @PostMapping
     public HotelGroupDto create(@RequestBody HotelGroup hotelGroup) {
+        if (hotelGroup.getName() == null || hotelGroup.getName().isBlank() || hotelGroup.getId() != null || (hotelGroup.getHotels() != null && !hotelGroup.getHotels().isEmpty())) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST);
         accessScopeService.requireSuperAdmin(authenticatedAppUserService.requireCurrentUser());
         hotelGroup.setCode(resolveOrGenerateCode(hotelGroup.getCode(), hotelGroup.getName()));
         return toDto(hotelGroupRepository.save(hotelGroup));

@@ -60,6 +60,7 @@ public class HotelController {
 
     @PostMapping
     public ResponseEntity<HotelDto> create(@RequestBody Hotel hotel) {
+        if (hotel.getName() == null || hotel.getName().isBlank() || hotel.getId() != null) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST);
         AppUser actor = authenticatedAppUserService.requireCurrentUser();
         Optional<HotelGroup> group = resolveGroup(hotel.getHotelGroup());
         if (group.isEmpty() || !accessScopeService.canManageHotelGroup(actor, group.get())) {

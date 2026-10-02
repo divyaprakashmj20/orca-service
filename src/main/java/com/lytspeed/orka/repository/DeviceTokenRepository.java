@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.Optional;
 
+@org.springframework.data.rest.core.annotation.RepositoryRestResource(exported = false)
 public interface DeviceTokenRepository extends JpaRepository<DeviceToken, Long> {
     Optional<DeviceToken> findByFcmToken(String fcmToken);
     List<DeviceToken> findByAppUserIdAndActiveTrue(Long appUserId);

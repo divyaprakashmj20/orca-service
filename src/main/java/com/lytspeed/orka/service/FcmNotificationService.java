@@ -179,7 +179,7 @@ public class FcmNotificationService {
                         request.getHotel().getId(),
                         AppUserStatus.ACTIVE,
                         hotelRoles
-                ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled())).toList();
+                ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled()) && Boolean.TRUE.equals(user.getActive())).toList();
 
         List<com.lytspeed.orka.entity.AppUser> groupRecipients = List.of();
         if (request.getHotel().getHotelGroup() != null && request.getHotel().getHotelGroup().getId() != null) {
@@ -187,15 +187,15 @@ public class FcmNotificationService {
                     .findByAssignedHotelGroupIdAndStatusAndAccessRoleIn(
                             request.getHotel().getHotelGroup().getId(),
                             AppUserStatus.ACTIVE,
-                            List.of(AccessRole.HOTEL_GROUP_ADMIN)
-                    ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled())).toList();
+                            List.of(AccessRole.HOTEL_GROUP_ADMIN, AccessRole.ADMIN)
+                    ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled()) && Boolean.TRUE.equals(user.getActive())).toList();
         }
 
         List<com.lytspeed.orka.entity.AppUser> superAdminRecipients = appUserRepository
                 .findByStatusAndAccessRoleIn(
                         AppUserStatus.ACTIVE,
                         List.of(AccessRole.SUPERADMIN)
-                ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled())).toList();
+                ).stream().filter(user -> Boolean.TRUE.equals(user.getFcmEnabled()) && Boolean.TRUE.equals(user.getActive())).toList();
 
         List<com.lytspeed.orka.entity.AppUser> recipients = new ArrayList<>();
         recipients.addAll(hotelRecipients);

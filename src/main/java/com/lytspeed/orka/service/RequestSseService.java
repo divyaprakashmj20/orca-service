@@ -1,195 +1,122 @@
 package com.lytspeed.orka.service;
 
-import com.lytspeed.orka.dto.AppUserSummaryDto;
-import com.lytspeed.orka.dto.HotelSummaryDto;
-import com.lytspeed.orka.dto.RequestDto;
-import com.lytspeed.orka.dto.RoomSummaryDto;
-import com.lytspeed.orka.entity.AppUser;
-import com.lytspeed.orka.entity.Hotel;
-import com.lytspeed.orka.entity.Request;
-import com.lytspeed.orka.entity.Room;
+import com.lytspeed.orka.dto.*;
+import com.lytspeed.orka.entity.*;
+import com.lytspeed.orka.entity.enums.AppUserStatus;
+import com.lytspeed.orka.repository.AppUserRepository;
+import com.lytspeed.orka.repository.RequestRepository;
 import com.lytspeed.orka.security.AccessScopeService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import jakarta.annotation.PreDestroy;
 import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.*;
+import org.springframework.transaction.support.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.stream.Collectors;
+import java.util.concurrent.*;
 
-/**
- * Manages Server-Sent Event emitters for the requests board.
- *
- * Each authenticated staff member/admin can open a long-lived GET /api/requests/stream
- * connection.  Whenever any request is created, updated, or deleted the controller
- * calls {@link #broadcast(List)} which fans out the scoped request list to every
- * connected client over their individual SseEmitter.
- *
- * SseEmitters are stored in a thread-safe {@link CopyOnWriteArrayList}.  Stale emitters
- * (client disconnected, timed out, or errored) are removed automatically via the
- * completion/timeout/error callbacks.
- *
- * Broadcast format: named event "requests", data = JSON array of RequestDto.
- * Frontend listens with:  eventSource.addEventListener('requests', handler)
- */
+/** Committed full snapshots. A slow connection cannot block other subscribers. */
 @Service
 public class RequestSseService {
+    private final AccessScopeService scopes;
+    private final AppUserRepository users;
+    private final RequestRepository requests;
+    private final TransactionTemplate transaction;
+    private final CopyOnWriteArrayList<Entry> emitters = new CopyOnWriteArrayList<>();
+    // Serialize database snapshots, never socket writes, to preserve publication order.
+    private final ExecutorService snapshots = new ThreadPoolExecutor(1,1,0,TimeUnit.MILLISECONDS,new ArrayBlockingQueue<>(1),r -> daemon(r,"orka-sse-snapshots"),new ThreadPoolExecutor.DiscardOldestPolicy());
 
-    private static final Logger log = LoggerFactory.getLogger(RequestSseService.class);
-
-    private final AccessScopeService accessScopeService;
-
-    /** Thread-safe list of (AppUser, SseEmitter) pairs. */
-    private final CopyOnWriteArrayList<EmitterEntry> emitters = new CopyOnWriteArrayList<>();
-
-    /**
-     * Single-threaded executor for ALL SseEmitter.send() calls.
-     *
-     * This is the critical design choice: Spring MVC's SseEmitter must NOT have
-     * send() called from the same Tomcat thread that returned the emitter. If a
-     * broadcast arrives before Spring's ResponseBodyEmitterReturnValueHandler has
-     * called emitter.initialize() (which happens after the controller method
-     * returns), the emitter is in an uninitialized state and the send fails/errors,
-     * silently dropping the emitter from the list. The client then auto-reconnects
-     * after ~3s, which is why the first mutation always seems "missed".
-     *
-     * By routing all sends through this executor the HTTP handler thread returns
-     * the emitter first, Spring initializes the async context, and only THEN does
-     * the executor thread run the sends — always in the correct order.
-     *
-     * Single-thread also guarantees ordering: initial snapshot is always delivered
-     * before the first broadcast (FIFO queue).
-     */
-    private final ExecutorService sseExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "sse-sender");
-        t.setDaemon(true);
-        return t;
-    });
-
-    public RequestSseService(AccessScopeService accessScopeService) {
-        this.accessScopeService = accessScopeService;
+    public RequestSseService(AccessScopeService scopes, AppUserRepository users, RequestRepository requests, PlatformTransactionManager manager) {
+        this.scopes = scopes;
+        this.users = users;
+        this.requests = requests;
+        this.transaction = new TransactionTemplate(manager);
+        this.transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    // -------------------------------------------------------------------------
-    // Public API
-    // -------------------------------------------------------------------------
+    private static Thread daemon(Runnable task, String name) {
+        Thread thread = new Thread(task, name);
+        thread.setDaemon(true);
+        return thread;
+    }
 
-    /**
-     * Registers an SseEmitter for the given authenticated user and schedules
-     * the initial snapshot to be sent from the background executor thread.
-     *
-     * The emitter is returned to Spring BEFORE any send() is attempted.
-     * This guarantees Spring has fully initialized the async context by the
-     * time the executor thread writes the first event.
-     *
-     * @param user        authenticated actor
-     * @param allRequests full unfiltered list from the repository
-     */
-    public SseEmitter registerAndSendInitial(AppUser user, List<Request> allRequests) {
-        SseEmitter emitter = new SseEmitter(0L);
-        EmitterEntry entry = new EmitterEntry(user, emitter);
-
-        emitter.onCompletion(() -> {
-            emitters.remove(entry);
-            log.debug("SSE: emitter completed for user={} total={}", user.getId(), emitters.size());
-        });
-        emitter.onTimeout(() -> {
-            emitter.complete();
-            emitters.remove(entry);
-            log.debug("SSE: emitter timed-out for user={}", user.getId());
-        });
-        emitter.onError(e -> {
-            emitter.complete();
-            emitters.remove(entry);
-            log.debug("SSE: emitter error for user={}: {}", user.getId(), e.getMessage());
-        });
-
+    public synchronized SseEmitter registerAndSendInitial(AppUser user, List<Request> ignored) {
+        if(emitters.size()>=200||emitters.stream().filter(e->e.userId.equals(user.getId())).count()>=5) {
+            // A proxy may report a closed downstream socket only on the next
+            // write. Probe the existing streams before rejecting this attempt
+            // so a retry can reclaim stale slots without waiting 30 seconds.
+            // The bounded snapshot queue coalesces concurrent retry probes.
+            sendCurrent();
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,"Too many live connections");
+        }
+        SseEmitter emitter = new SseEmitter(55 * 60 * 1000L);
+        Entry entry = new Entry(user.getId(), emitter);
+        Runnable remove = () -> { emitters.remove(entry); entry.sender.shutdownNow(); };
+        emitter.onCompletion(remove);
+        emitter.onTimeout(() -> { remove.run(); emitter.complete(); });
+        emitter.onError(error -> remove.run());
         emitters.add(entry);
-        log.debug("SSE: registered emitter for user={} total={}", user.getId(), emitters.size());
-
-        // Pre-build the scoped DTO list on the calling thread (within the JPA
-        // session / HTTP thread) before handing off to the executor.
-        List<RequestDto> scoped = accessScopeService
-                .filterRequests(user, allRequests)
-                .stream()
-                .map(RequestSseService::toDto)
-                .collect(Collectors.toList());
-
-        // Schedule the actual send on the background executor. By the time this
-        // task runs, Spring will have called emitter.initialize() and the async
-        // response is fully committed — send() is safe.
-        sseExecutor.submit(() -> {
-            try {
-                emitter.send(
-                        SseEmitter.event()
-                                .name("requests")
-                                .data(scoped, MediaType.APPLICATION_JSON)
-                );
-                log.debug("SSE: initial snapshot sent to user={}", user.getId());
-            } catch (IOException | IllegalStateException e) {
-                log.debug("SSE: initial send failed for user={}: {}", user.getId(), e.getMessage());
-                emitter.completeWithError(e);
-            }
-        });
-
+        // Query after registration, not from a list read before a concurrent commit.
+        sendCurrent();
         return emitter;
     }
 
-    /**
-     * Fans out the scoped request list to every connected client.
-     * Runs on the background executor — never blocks the calling HTTP thread.
-     *
-     * @param allRequests full un-filtered list from the repository
-     */
-    public void broadcast(List<Request> allRequests) {
-        if (emitters.isEmpty()) {
-            return;
-        }
+    public void broadcast(List<Request> ignored) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { sendCurrent(); }
+            });
+        } else sendCurrent();
+    }
 
-        // Pre-build per-user scoped DTOs on the calling thread, then dispatch.
-        List<PendingBroadcast> payloads = emitters.stream()
-                .map(entry -> new PendingBroadcast(
-                        entry,
-                        accessScopeService
-                                .filterRequests(entry.user(), allRequests)
-                                .stream()
-                                .map(RequestSseService::toDto)
-                                .collect(Collectors.toList())
-                ))
-                .collect(Collectors.toList());
-
-        sseExecutor.submit(() -> {
-            log.debug("SSE: broadcasting to {} client(s)", payloads.size());
-            for (PendingBroadcast pb : payloads) {
-                try {
-                    pb.entry().emitter().send(
-                            SseEmitter.event()
-                                    .name("requests")
-                                    .data(pb.scoped(), MediaType.APPLICATION_JSON)
-                    );
-                } catch (IOException | IllegalStateException e) {
-                    log.debug("SSE: send failed for user={}, removing: {}",
-                            pb.entry().user().getId(), e.getMessage());
-                    pb.entry().emitter().completeWithError(e);
-                    emitters.remove(pb.entry());
+    @Scheduled(fixedDelay = 30000)
+    public void sendCurrent() {
+        if (emitters.isEmpty() || snapshots.isShutdown()) return;
+        snapshots.submit(() -> transaction.executeWithoutResult(status -> {
+            List<Request> all = requests.findAll();
+            for (Entry entry : emitters) {
+                AppUser actor = users.findById(entry.userId).orElse(null);
+                if (actor == null || actor.getStatus() != AppUserStatus.ACTIVE || !Boolean.TRUE.equals(actor.getActive()) || actor.getAccessRole() == null) {
+                    emitters.remove(entry); entry.sender.shutdownNow(); entry.emitter.complete(); continue;
                 }
+                List<RequestDto> data = scopes.filterRequests(actor, all).stream().map(RequestSseService::toDto).toList();
+                entry.offer(data);
             }
-        });
+        }));
     }
 
-    /** Returns the number of currently connected SSE clients. */
-    public int connectedCount() {
-        return emitters.size();
+    public int connectedCount() { return emitters.size(); }
+
+    @PreDestroy public void close() {
+        snapshots.shutdownNow();
+        for (Entry entry : emitters) { entry.sender.shutdownNow(); entry.emitter.complete(); }
+        emitters.clear();
     }
 
-    // -------------------------------------------------------------------------
-    // DTO conversion
-    // -------------------------------------------------------------------------
+    private final class Entry {
+        final Long userId;
+        final SseEmitter emitter;
+        // At most one pending snapshot per subscriber; older unsent snapshots are superseded.
+        final ThreadPoolExecutor sender = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(1), r -> daemon(r, "orka-sse-client"), new ThreadPoolExecutor.DiscardOldestPolicy());
+        Entry(Long userId, SseEmitter emitter) { this.userId = userId; this.emitter = emitter; }
+        void offer(List<RequestDto> data) {
+            if (sender.isShutdown()) return;
+            sender.execute(() -> {
+                try { emitter.send(SseEmitter.event().name("requests").data(data, MediaType.APPLICATION_JSON)); }
+                catch (IOException | IllegalStateException error) {
+                    emitters.remove(this); sender.shutdownNow();
+                    try { emitter.completeWithError(error); }
+                    catch (IllegalStateException alreadyCompleted) {
+                        // The container may have completed its error callback
+                        // while the failed socket write was returning.
+                    }
+                }
+            });
+        }
+    }
 
     static RequestDto toDto(Request request) {
         HotelSummaryDto hotelDto = null;
@@ -243,11 +170,4 @@ public class RequestSseService {
         );
     }
 
-    // -------------------------------------------------------------------------
-    // Internal
-    // -------------------------------------------------------------------------
-
-    private record EmitterEntry(AppUser user, SseEmitter emitter) {}
-
-    private record PendingBroadcast(EmitterEntry entry, List<RequestDto> scoped) {}
 }

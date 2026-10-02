@@ -13,6 +13,7 @@ import com.lytspeed.orka.security.AccessScopeService;
 import com.lytspeed.orka.security.AuthenticatedAppUserService;
 import com.lytspeed.orka.service.FcmNotificationService;
 import com.lytspeed.orka.service.RequestSseService;
+import com.lytspeed.orka.service.RequestTimeline;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -152,7 +153,7 @@ public class RequestController {
                     .orElseGet(() -> createGuestSession(room));
                     List<RequestDto> requests = requestRepository.findByGuestSessionIdOrderByCreatedAtDesc(session.getId())
                             .stream()
-                            .map(this::toDto)
+                            .map(this::toGuestDto)
                             .collect(Collectors.toList());
 
                     return ResponseEntity.ok(new GuestSessionBootstrapDto(
@@ -170,7 +171,7 @@ public class RequestController {
             @PathVariable String token,
             @RequestBody GuestRequestCreateRequest input
     ) {
-        if (input == null || input.getType() == null || input.getSessionToken() == null || input.getSessionToken().isBlank()) {
+        if (input == null || input.getType() == null || input.getSessionToken() == null || input.getSessionToken().isBlank() || (input.getMessage() != null && input.getMessage().length() > 2000)) {
             return ResponseEntity.badRequest().build();
         }
 
@@ -207,7 +208,7 @@ public class RequestController {
         Request saved = requestRepository.save(request);
         fcmNotificationService.notifyNewRequest(saved);
         sseService.broadcast(requestRepository.findAll());
-        return ResponseEntity.ok(toDto(saved));
+        return ResponseEntity.ok(toGuestDto(saved));
     }
 
     @PutMapping("/{id}")
@@ -221,23 +222,27 @@ public class RequestController {
                         return ResponseEntity.status(HttpStatus.CONFLICT).<RequestDto>build();
                     }
 
-                    Optional<Hotel> hotel = resolveHotel(input.getHotelId());
-                    Optional<Room> room = resolveRoom(input.getRoomId());
-                    Optional<AppUser> assignee = resolveAppUser(input.getAssigneeId());
-
-                    if (hotel.isPresent() && accessScopeService.canManageHotel(actor, hotel.get())) {
-                        existing.setHotel(hotel.get());
-                    }
-                    if (room.isPresent()
-                            && room.get().getHotel() != null
-                            && existing.getHotel() != null
-                            && room.get().getHotel().getId().equals(existing.getHotel().getId())) {
-                        existing.setRoom(room.get());
-                    }
-                    existing.setAssignee(input.getAssigneeId() == null ? null : assignee.orElse(null));
+                    var from = existing.getStatus();
+                    var to = input.getStatus();
+                    boolean admin = !accessScopeService.isStaff(actor);
+                    boolean accepting = from == com.lytspeed.orka.entity.enums.RequestStatus.NEW && to == com.lytspeed.orka.entity.enums.RequestStatus.ACCEPTED && actor.getId().equals(input.getAssigneeId());
+                    boolean completing = from == com.lytspeed.orka.entity.enums.RequestStatus.ACCEPTED && to == com.lytspeed.orka.entity.enums.RequestStatus.COMPLETED && (admin || (existing.getAssignee() != null && actor.getId().equals(existing.getAssignee().getId())));
+                    boolean cancelling = admin && (from == com.lytspeed.orka.entity.enums.RequestStatus.NEW || from == com.lytspeed.orka.entity.enums.RequestStatus.ACCEPTED) && to == com.lytspeed.orka.entity.enums.RequestStatus.CANCELLED;
+                    boolean reopening = admin && (from == com.lytspeed.orka.entity.enums.RequestStatus.COMPLETED || from == com.lytspeed.orka.entity.enums.RequestStatus.CANCELLED) && to == com.lytspeed.orka.entity.enums.RequestStatus.NEW && input.getAssigneeId() == null;
+                    Long currentAssignee = existing.getAssignee() == null ? null : existing.getAssignee().getId();
+                    if (!(accepting || completing || cancelling || reopening)
+                        || ((completing || cancelling) && !java.util.Objects.equals(currentAssignee,input.getAssigneeId()))) return ResponseEntity.status(403).<RequestDto>build();
+                    if (!java.util.Objects.equals(existing.getHotel().getId(), input.getHotelId())
+                        || !java.util.Objects.equals(existing.getRoom().getId(), input.getRoomId())
+                        || !java.util.Objects.equals(existing.getType(),input.getType())
+                        || !java.util.Objects.equals(existing.getMessage(),input.getMessage())
+                        || !java.util.Objects.equals(existing.getRating(),input.getRating())
+                        || !java.util.Objects.equals(existing.getComments(),input.getComments())) return ResponseEntity.badRequest().<RequestDto>build();
+                    if (accepting) existing.setAssignee(actor);
+                    if (reopening) existing.setAssignee(null);
                     applyWriteRequest(existing, input);
 
-                    Request saved = requestRepository.save(existing);
+                    Request saved = requestRepository.saveAndFlush(existing);
                     sseService.broadcast(requestRepository.findAll());
                     return ResponseEntity.ok(toDto(saved));
                 })
@@ -286,10 +291,7 @@ public class RequestController {
     private void applyWriteRequest(Request request, RequestWriteRequest input) {
         request.setType(input.getType());
         request.setMessage(input.getMessage());
-        request.setStatus(input.getStatus());
-        request.setCreatedAt(input.getCreatedAt());
-        request.setAcceptedAt(input.getAcceptedAt());
-        request.setCompletedAt(input.getCompletedAt());
+        RequestTimeline.transition(request, input.getStatus(), LocalDateTime.now());
         request.setRating(input.getRating());
         request.setComments(input.getComments());
     }
@@ -346,6 +348,13 @@ public class RequestController {
         );
     }
 
+    private RequestDto toGuestDto(Request request) {
+        RequestDto dto=toDto(request);
+        if(dto.getHotel()!=null)dto.getHotel().setCode(null);
+        dto.setAssignee(null);
+        return dto;
+    }
+
     private GuestRoomContextDto toGuestRoomContext(Room room) {
         HotelGroupSummaryDto hotelGroupDto = null;
         if (room.getHotel() != null && room.getHotel().getHotelGroup() != null) {
@@ -353,7 +362,7 @@ public class RequestController {
             hotelGroupDto = new HotelGroupSummaryDto(
                     group.getId(),
                     group.getName(),
-                    group.getCode()
+                    null
             );
         }
 
@@ -363,7 +372,7 @@ public class RequestController {
             hotelDto = new HotelSummaryDto(
                     hotel.getId(),
                     hotel.getName(),
-                    hotel.getCode(),
+                    null,
                     hotel.getCity(),
                     hotel.getCountry()
             );

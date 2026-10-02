@@ -60,6 +60,7 @@ public class RoomController {
 
     @PostMapping
     public ResponseEntity<RoomDto> create(@RequestBody Room room) {
+        if (room.getNumber() == null || room.getNumber().isBlank() || room.getId() != null || room.getGuestAccessToken() != null) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST);
         AppUser actor = authenticatedAppUserService.requireCurrentUser();
         Optional<Hotel> hotel = resolveHotel(room.getHotel());
         if (hotel.isEmpty() || !accessScopeService.canManageHotel(actor, hotel.get())) {

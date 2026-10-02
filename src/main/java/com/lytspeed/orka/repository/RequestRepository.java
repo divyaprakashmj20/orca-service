@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
+@org.springframework.data.rest.core.annotation.RepositoryRestResource(exported = false)
 public interface RequestRepository extends JpaRepository<Request, Long> {
     List<Request> findByGuestSessionIdOrderByCreatedAtDesc(Long guestSessionId);
 

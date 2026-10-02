@@ -8,6 +8,9 @@ spring:
     hibernate:
       ddl-auto: "update"
 
+server:
+  address: 127.0.0.1
+
 firebase:
   admin:
     credentials:

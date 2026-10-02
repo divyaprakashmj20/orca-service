@@ -9,6 +9,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+@org.springframework.data.rest.core.annotation.RepositoryRestResource(exported = false)
 public interface AppUserRepository extends JpaRepository<AppUser, Long> {
     Optional<AppUser> findByFirebaseUid(String firebaseUid);
     Optional<AppUser> findByEmailIgnoreCase(String email);

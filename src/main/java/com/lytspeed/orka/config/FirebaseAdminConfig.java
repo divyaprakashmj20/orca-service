@@ -23,7 +23,11 @@ public class FirebaseAdminConfig {
 
     @Bean
     @ConditionalOnProperty(name = "firebase.admin.credentials.path")
-    FirebaseApp firebaseApp(@Value("${firebase.admin.credentials.path}") String credentialsPath) throws IOException {
+    FirebaseApp firebaseApp(@Value("${firebase.admin.credentials.path}") String credentialsPath,
+                            @Value("${FIREBASE_AUTH_EMULATOR_HOST:}") String emulatorHost) throws IOException {
+        if (emulatorHost != null && !emulatorHost.isBlank()) {
+            throw new IllegalStateException("Real Firebase credentials cannot be used with FIREBASE_AUTH_EMULATOR_HOST; use the isolated integration profile for emulator authentication");
+        }
         if (!FirebaseApp.getApps().isEmpty()) {
             log.info("Reusing existing FirebaseApp instance");
             return FirebaseApp.getApps().get(0);
