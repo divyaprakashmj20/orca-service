@@ -11,7 +11,8 @@ import com.lytspeed.orka.repository.RequestRepository;
 import com.lytspeed.orka.repository.RoomRepository;
 import com.lytspeed.orka.security.AccessScopeService;
 import com.lytspeed.orka.security.AuthenticatedAppUserService;
-import com.lytspeed.orka.service.FcmNotificationService;
+import com.lytspeed.orka.service.WorkNotificationEvents;
+import org.springframework.context.ApplicationEventPublisher;
 import com.lytspeed.orka.service.RequestSseService;
 import com.lytspeed.orka.service.RequestTimeline;
 import org.springframework.http.HttpStatus;
@@ -40,7 +41,7 @@ public class RequestController {
     private final RoomRepository roomRepository;
     private final AppUserRepository appUserRepository;
     private final GuestSessionRepository guestSessionRepository;
-    private final FcmNotificationService fcmNotificationService;
+    private final ApplicationEventPublisher notifications;
     private final AuthenticatedAppUserService authenticatedAppUserService;
     private final AccessScopeService accessScopeService;
     private final RequestSseService sseService;
@@ -52,7 +53,7 @@ public class RequestController {
             RoomRepository roomRepository,
             AppUserRepository appUserRepository,
             GuestSessionRepository guestSessionRepository,
-            FcmNotificationService fcmNotificationService,
+            ApplicationEventPublisher notifications,
             AuthenticatedAppUserService authenticatedAppUserService,
             AccessScopeService accessScopeService,
             RequestSseService sseService,
@@ -63,7 +64,7 @@ public class RequestController {
         this.roomRepository = roomRepository;
         this.appUserRepository = appUserRepository;
         this.guestSessionRepository = guestSessionRepository;
-        this.fcmNotificationService = fcmNotificationService;
+        this.notifications = notifications;
         this.authenticatedAppUserService = authenticatedAppUserService;
         this.accessScopeService = accessScopeService;
         this.sseService = sseService;
@@ -119,7 +120,7 @@ public class RequestController {
         request.setAssignee(assignee.orElse(null));
         applyWriteRequest(request, input);
         Request saved = requestRepository.save(request);
-        fcmNotificationService.notifyNewRequest(saved);
+        notifications.publishEvent(new WorkNotificationEvents.Created(WorkNotificationEvents.Kind.SERVICE_REQUEST, saved.getId()));
         sseService.broadcast(requestRepository.findAll());
         return ResponseEntity.ok(toDto(saved));
     }
@@ -206,7 +207,7 @@ public class RequestController {
         request.setComments(null);
 
         Request saved = requestRepository.save(request);
-        fcmNotificationService.notifyNewRequest(saved);
+        notifications.publishEvent(new WorkNotificationEvents.Created(WorkNotificationEvents.Kind.SERVICE_REQUEST, saved.getId()));
         sseService.broadcast(requestRepository.findAll());
         return ResponseEntity.ok(toGuestDto(saved));
     }

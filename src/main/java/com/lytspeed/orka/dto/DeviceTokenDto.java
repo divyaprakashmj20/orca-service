@@ -16,6 +16,7 @@ public class DeviceTokenDto {
     private Long appUserId;
     private String appUserEmail;
     private String platform;
+    private Integer notificationRendererVersion;
     private Boolean active;
     private LocalDateTime lastSeenAt;
     private LocalDateTime createdAt;

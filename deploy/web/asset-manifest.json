@@ -1,0 +1,45 @@
+{
+  "builtAt": "2026-10-03T04:14:39.510Z",
+  "files": [
+    {
+      "path": "dist/assets/dm-sans-latin-ext-wght-normal-BOFOeGcA.woff2",
+      "bytes": 18228,
+      "sha256": "a5d38fe99f930275684999b462c7123faa063d9e44e73b4b241723d884aa0f49"
+    },
+    {
+      "path": "dist/assets/dm-sans-latin-wght-normal-Xz1IZZA0.woff2",
+      "bytes": 36932,
+      "sha256": "9fea608a947e67020c33cad9a6fe3d60c54119dfb8cff87768a8117a15ed7543"
+    },
+    {
+      "path": "dist/assets/firebase-DKbACjU0.js",
+      "bytes": 171008,
+      "sha256": "90898867de6a37d0a5b9811d0623fcfcfcddfc0b3fdff24ceda6934b494e755c"
+    },
+    {
+      "path": "dist/assets/index-DpCm8p1U.css",
+      "bytes": 127419,
+      "sha256": "d910963c36b3991444f7b62c76211535b385abc16765a5228972543cf7bd884c"
+    },
+    {
+      "path": "dist/assets/index-DRH30n9o.js",
+      "bytes": 415474,
+      "sha256": "99c8ff03bb0931893a3d6b2c71dac6d14d70fb25113ec82d87bec8571dda9e62"
+    },
+    {
+      "path": "dist/assets/react-Ch0ZTqy3.js",
+      "bytes": 52220,
+      "sha256": "361da9a02c8cf0f1b740f7ad25acd421bbddd60e353c426aa7f3fa0bdfacbd0d"
+    },
+    {
+      "path": "dist/assets/web-D-vxoyGH.js",
+      "bytes": 817,
+      "sha256": "f438a0b62788d828cfb57beab7c57e6a8a6053532f46dfbe878f0c7871072864"
+    },
+    {
+      "path": "dist/index.html",
+      "bytes": 612,
+      "sha256": "51318088a41ae3e8916eea3ed2d2f0b31d66a854fafcca9892b1a9ec4df22d3d"
+    }
+  ]
+}

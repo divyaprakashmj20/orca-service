@@ -4,6 +4,8 @@ import com.lytspeed.orka.entity.*;
 import com.lytspeed.orka.repository.*;
 import com.lytspeed.orka.security.*;
 import com.lytspeed.orka.config.OrkaGuestProperties;
+import com.lytspeed.orka.service.WorkNotificationEvents;
+import org.springframework.context.ApplicationEventPublisher;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.validation.Valid;
@@ -28,11 +30,12 @@ public class FoodController {
  private final AccessScopeService scope;
  private final OrkaGuestProperties guestProperties;
  private final EntityManager em;
+ private final ApplicationEventPublisher notifications;
  public FoodController(FoodSettingsRepository settings,FoodItemRepository items,FoodOrderRepository orders,
  HotelRepository hotels,RoomRepository rooms,GuestSessionRepository sessions,AuthenticatedAppUserService users,
- AccessScopeService scope,OrkaGuestProperties guestProperties,EntityManager em) {
+ AccessScopeService scope,OrkaGuestProperties guestProperties,EntityManager em,ApplicationEventPublisher notifications) {
   this.settings=settings;this.items=items;this.orders=orders;this.hotels=hotels;this.rooms=rooms;
-  this.sessions=sessions;this.users=users;this.scope=scope;this.guestProperties=guestProperties;this.em=em;
+  this.sessions=sessions;this.users=users;this.scope=scope;this.guestProperties=guestProperties;this.em=em;this.notifications=notifications;
  }
  public record SettingsInput(Long version,boolean enabled,boolean paused,Boolean automaticOpening,@Min(0) @Max(60) Integer guestCancellationMinutes,@NotBlank String timezone,
   @NotBlank String opens,@NotBlank String closes,@Pattern(regexp="[A-Z]{3}") @NotNull String currency,@Min(1) @Max(1000) int busyThreshold) {}
@@ -146,7 +149,9 @@ public class FoodController {
    var line=new FoodOrder.Line();line.setItemId(i.getId());line.setName(i.getName());line.setPrice(i.getPrice());line.setQuantity(choice.quantity());o.getLines().add(line);total=total.add(i.getPrice().multiply(BigDecimal.valueOf(choice.quantity())));
   }
   o.setCancelUntil(o.getCreatedAt().plusSeconds(60L*(config.getGuestCancellationMinutes()==null?5:config.getGuestCancellationMinutes())));
-  o.setTotal(total);return view(orders.saveAndFlush(o));
+   o.setTotal(total);var saved=orders.saveAndFlush(o);
+   notifications.publishEvent(new WorkNotificationEvents.Created(WorkNotificationEvents.Kind.FOOD_ORDER,saved.getId()));
+   return view(saved);
  }
  @PostMapping("/guest/{token}/orders/{id}/cancel") public OrderView cancel(@PathVariable String token,@PathVariable Long id,@Valid @RequestBody GuestInput input){
   var s=guest(token,input.sessionToken());var o=orders.findById(id).orElseThrow(()->fail(HttpStatus.NOT_FOUND,"Order not found"));

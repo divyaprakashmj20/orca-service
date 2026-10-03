@@ -3,12 +3,10 @@ package com.lytspeed.orka.controller;
 import com.lytspeed.orka.dto.TestNotificationRequest;
 import com.lytspeed.orka.service.FcmNotificationService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-@Transactional
 @RestController
 @RequestMapping("/api/notifications")
 @CrossOrigin
@@ -22,7 +20,11 @@ public class NotificationController {
 
     @GetMapping("/health")
     public ResponseEntity<Map<String, Object>> health() {
-        return ResponseEntity.ok(Map.of("fcmEnabled", fcmNotificationService.isEnabled()));
+        Map<String, Object> health = new java.util.LinkedHashMap<>();
+        health.put("fcmEnabled", fcmNotificationService.isEnabled());
+        Long target = fcmNotificationService.localTestDeviceTokenId();
+        if (target != null) health.put("localTestDeviceTokenId", target);
+        return ResponseEntity.ok(health);
     }
 
     @PostMapping("/test")

@@ -13,4 +13,5 @@ public class DeviceTokenRegisterRequest {
     private String firebaseUid;
     private String fcmToken;
     private String platform;
+    private Integer notificationRendererVersion;
 }

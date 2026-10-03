@@ -13,4 +13,7 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
     List<Request> findByStatus(RequestStatus status);
 
     List<Request> findByStatusIn(List<RequestStatus> statuses);
+
+    @org.springframework.data.jpa.repository.Query("select r.id from Request r where r.status in :statuses")
+    List<Long> findReminderIds(@org.springframework.data.repository.query.Param("statuses") List<RequestStatus> statuses);
 }

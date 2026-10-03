@@ -35,6 +35,9 @@ public class DeviceToken {
     @Column(nullable = false, length = 32)
     private String platform;
 
+    @Column(name = "notification_renderer_version", nullable = false, columnDefinition = "integer default 0")
+    private Integer notificationRendererVersion = 0;
+
     @Column(nullable = false)
     private Boolean active = true;
 
@@ -53,6 +56,7 @@ public class DeviceToken {
         if (active == null) {
             active = true;
         }
+        if (notificationRendererVersion == null) notificationRendererVersion = 0;
         if (lastSeenAt == null) {
             lastSeenAt = now;
         }

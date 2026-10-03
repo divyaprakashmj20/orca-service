@@ -1,0 +1,5 @@
+services:
+  orka-service:
+    image: ghcr.io/divyaprakashmj20/orka-service:${ORKA_RELEASE_SHA:?Set ORKA_RELEASE_SHA}
+  orka-ui:
+    image: ghcr.io/divyaprakashmj20/orka-product:${ORKA_RELEASE_SHA:?Set ORKA_RELEASE_SHA}

@@ -69,6 +69,9 @@ public class DeviceTokenController {
         deviceToken.setAppUser(appUser);
         deviceToken.setFcmToken(fcmToken);
         deviceToken.setPlatform(platform);
+        // Registration from an older client resets any previous native-renderer capability.
+        deviceToken.setNotificationRendererVersion(input.getNotificationRendererVersion() == null
+                ? 0 : input.getNotificationRendererVersion());
         deviceToken.setActive(true);
         deviceToken.setLastSeenAt(LocalDateTime.now());
 
@@ -101,7 +104,9 @@ public class DeviceTokenController {
     private boolean isValidRegister(DeviceTokenRegisterRequest input) {
         return input != null
                 && input.getFcmToken() != null && !input.getFcmToken().trim().isBlank()
-                && input.getPlatform() != null && !input.getPlatform().trim().isBlank();
+                && input.getPlatform() != null && !input.getPlatform().trim().isBlank()
+                && (input.getNotificationRendererVersion() == null || input.getNotificationRendererVersion() == 0
+                    || (input.getNotificationRendererVersion() == 1 && "ANDROID".equals(normalizePlatform(input.getPlatform()))));
     }
 
     private String normalizePlatform(String platform) {
@@ -114,6 +119,7 @@ public class DeviceTokenController {
                 token.getAppUser() == null ? null : token.getAppUser().getId(),
                 token.getAppUser() == null ? null : token.getAppUser().getEmail(),
                 token.getPlatform(),
+                token.getNotificationRendererVersion() == null ? 0 : token.getNotificationRendererVersion(),
                 token.getActive(),
                 token.getLastSeenAt(),
                 token.getCreatedAt(),

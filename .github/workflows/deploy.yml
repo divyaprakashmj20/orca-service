@@ -1,144 +1,76 @@
-name: Build and Deploy (Service)
-
+name: Build and Deploy Orka
 on:
   push:
     branches: [main]
   workflow_dispatch:
     inputs:
       deploy:
-        description: "Deploy to VM after build"
-        required: false
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
-
+        description: Deploy the checked release to the Oracle VM
+        type: boolean
+        default: false
 permissions:
   contents: read
   packages: write
-
+concurrency:
+  group: orka-production
+  cancel-in-progress: false
 env:
-  IMAGE_NAME: ghcr.io/divyaprakashmj20/orka-service
   PLATFORM: linux/arm64
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - uses: actions/checkout@v4
+      - name: Check packaged web assets
+        run: node deploy/check-web-release.mjs
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
+      - name: Build backend
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: ${{ env.PLATFORM }}
           push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
-
+          tags: ghcr.io/divyaprakashmj20/orka-service:${{ github.sha }}
+      - name: Build web UI
+        uses: docker/build-push-action@v6
+        with:
+          context: deploy/web
+          platforms: ${{ env.PLATFORM }}
+          push: true
+          build-args: RELEASE_SHA=${{ github.sha }}
+          tags: ghcr.io/divyaprakashmj20/orka-product:${{ github.sha }}
   deploy:
-    runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'push' || inputs.deploy == 'true'
+    if: github.event_name == 'push' || inputs.deploy == true
+    runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Copy docker-compose to VM
+      - uses: actions/checkout@v4
+      - name: Copy release instructions
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.OCI_HOST }}
           username: ${{ secrets.OCI_USER }}
           port: ${{ secrets.OCI_PORT }}
           key: ${{ secrets.OCI_SSH_KEY }}
-          source: deploy/docker-compose.yml,Caddyfile
-          target: /tmp/orka-deploy
-          overwrite: true
-
-      - name: Deploy on VM
+          source: deploy/release.compose.yaml,deploy/release-on-vm.sh
+          target: /tmp/orka-release-${{ github.sha }}
+      - name: Back up and deploy application containers
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          ORKA_REGISTRY_USERNAME: ${{ github.actor }}
+          ORKA_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.OCI_HOST }}
           username: ${{ secrets.OCI_USER }}
           port: ${{ secrets.OCI_PORT }}
           key: ${{ secrets.OCI_SSH_KEY }}
-          script: |
-            set -e
-            sudo mkdir -p /opt/orka
-            sudo mv /tmp/orka-deploy/deploy/docker-compose.yml /opt/orka/docker-compose.yml || true
-            sudo mv /tmp/orka-deploy/Caddyfile /opt/orka/Caddyfile || true
-            sudo chown -R $USER:$USER /opt/orka
-            cat >/opt/orka/.env <<'EOF'
-            POSTGRES_DB=orka
-            POSTGRES_USER=orka
-            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-            SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/orka
-            SPRING_DATASOURCE_USERNAME=orka
-            SPRING_DATASOURCE_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-            SPRING_JPA_HIBERNATE_DDL_AUTO=update
-            EOF
-            cat >/opt/orka/firebase-config.json <<'EOF'
-            ${{ secrets.FIREBASE_CONFIG_JSON }}
-            EOF
-            cat >/opt/orka/firebase-admin-sdk.json <<'EOF'
-            ${{ secrets.FIREBASE_ADMIN_SDK_JSON }}
-            EOF
-            sudo docker compose --env-file /opt/orka/.env -f /opt/orka/docker-compose.yml pull postgres orka-service caddy
-            sudo docker compose --env-file /opt/orka/.env -f /opt/orka/docker-compose.yml up -d postgres orka-service caddy
-      - name: Copy docker-compose to VM
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.OCI_HOST }}
-          username: ${{ secrets.OCI_USER }}
-          port: ${{ secrets.OCI_PORT }}
-          key: ${{ secrets.OCI_SSH_KEY }}
-          source: deploy/docker-compose.yml
-          target: /tmp/orka-deploy
-          overwrite: true
-
-      - name: Deploy on VM
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.OCI_HOST }}
-          username: ${{ secrets.OCI_USER }}
-          port: ${{ secrets.OCI_PORT }}
-          key: ${{ secrets.OCI_SSH_KEY }}
-          script: |
-            set -e
-            sudo mkdir -p /opt/orka
-            sudo mv /tmp/orka-deploy/deploy/docker-compose.yml /opt/orka/docker-compose.yml || true
-            sudo chown -R $USER:$USER /opt/orka
-            cat >/opt/orka/.env <<'EOF'
-            POSTGRES_DB=orka
-            POSTGRES_USER=orka
-            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-            SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/orka
-            SPRING_DATASOURCE_USERNAME=orka
-            SPRING_DATASOURCE_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-            SPRING_JPA_HIBERNATE_DDL_AUTO=update
-            EOF
-            cat >/opt/orka/firebase-config.json <<'EOF'
-            ${{ secrets.FIREBASE_CONFIG_JSON }}
-            EOF
-            cat >/opt/orka/firebase-admin-sdk.json <<'EOF'
-            ${{ secrets.FIREBASE_ADMIN_SDK_JSON }}
-            EOF
-            sudo docker compose --env-file /opt/orka/.env -f /opt/orka/docker-compose.yml pull postgres orka-service
-            sudo docker compose --env-file /opt/orka/.env -f /opt/orka/docker-compose.yml up -d postgres orka-service
+          script_stop: true
+          envs: ORKA_REGISTRY_USERNAME,ORKA_REGISTRY_PASSWORD
+          script: bash /tmp/orka-release-${{ github.sha }}/deploy/release-on-vm.sh ${{ github.sha }}
