@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 @Getter
@@ -14,7 +14,7 @@ import java.util.List;
 @NoArgsConstructor
 public class GuestSessionBootstrapDto {
     private String sessionToken;
-    private LocalDateTime sessionExpiresAt;
+    private Instant sessionExpiresAt;
     private GuestRoomContextDto context;
     private List<RequestDto> requests;
 }

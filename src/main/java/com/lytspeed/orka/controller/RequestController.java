@@ -159,7 +159,8 @@ public class RequestController {
 
                     return ResponseEntity.ok(new GuestSessionBootstrapDto(
                             session.getSessionToken(),
-                    guestSessionExpiresAt(session),
+                            // Persisted guest timestamps are server-local; expose a real instant to every client timezone.
+                            guestSessionExpiresAt(session).atZone(java.time.ZoneId.systemDefault()).toInstant(),
                             toGuestRoomContext(room),
                             requests
                     ));
