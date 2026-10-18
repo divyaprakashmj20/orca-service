@@ -10,6 +10,7 @@ target.source_build_phase.add_file_reference(file)
 target.build_configurations.each do |configuration|
   configuration.build_settings.merge!({
     'GENERATE_INFOPLIST_FILE' => 'YES', 'SWIFT_VERSION' => '5.0',
+    'PRODUCT_NAME' => 'OrkaUITests',
     'PRODUCT_BUNDLE_IDENTIFIER' => 'com.lytspeed.orka.uitests',
     'TEST_TARGET_NAME' => 'App', 'CODE_SIGNING_ALLOWED' => 'NO'
   })
