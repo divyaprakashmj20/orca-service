@@ -85,8 +85,8 @@
     },
     {
       "path": "ios/App/App/OrkaDevicePlugin.swift",
-      "bytes": 7624,
-      "sha256": "e87044e4a5987b2f3c6f82656666710ec3dd1d7b132e87d293e0bee2a288f800"
+      "bytes": 8492,
+      "sha256": "817171545c41d13b7297612d66dd7907d93d2d475122032ab225c2d283d7cbfa"
     },
     {
       "path": "ios/App/App/public/assets/dm-sans-latin-ext-wght-normal-BOFOeGcA.woff2",
@@ -175,8 +175,8 @@
     },
     {
       "path": "OrkaUITests.swift",
-      "bytes": 2364,
-      "sha256": "43f5a1c4165b1ea6e8621b0a73f37d05db65d4ca1f145364639d76ba320968a2"
+      "bytes": 2628,
+      "sha256": "602d69e52fbdf8f99178afe276360d87f7cbb6bfdf9750c062d3ca6d337036ff"
     },
     {
       "path": "package.json",

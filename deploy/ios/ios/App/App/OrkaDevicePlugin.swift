@@ -5,6 +5,20 @@ import UserNotifications
 class OrkaViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(OrkaDevicePlugin())
+        // Give every route and fixed overlay the usable screen, including on
+        // phones with a notch/Dynamic Island and when rotated.
+        guard let webView = webView else { return }
+        let container = UIView(frame: view.bounds)
+        container.backgroundColor = .systemBackground
+        view = container
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(webView)
+        NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: container.safeAreaLayoutGuide.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: container.safeAreaLayoutGuide.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: container.safeAreaLayoutGuide.trailingAnchor)
+        ])
     }
 }
 

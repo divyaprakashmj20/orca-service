@@ -26,6 +26,10 @@ final class OrkaUITests: XCTestCase {
         XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 30))
         XCTAssertTrue(app.staticTexts["Good to see you."].waitForExistence(timeout: 30))
         XCTAssertTrue(app.buttons["Sign in"].exists)
+        let header = app.links.firstMatch
+        XCTAssertTrue(header.exists)
+        XCTAssertGreaterThanOrEqual(header.frame.minY, app.statusBars.firstMatch.frame.maxY,
+                                    "The app header must stay below the iPhone status bar")
         let login = XCTAttachment(screenshot: app.screenshot())
         login.name = "Orka iPhone native login"; login.lifetime = .keepAlways
         add(login)
