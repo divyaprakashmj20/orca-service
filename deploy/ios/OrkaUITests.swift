@@ -28,8 +28,14 @@ final class OrkaUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Sign in"].exists)
         let header = app.links.firstMatch
         XCTAssertTrue(header.exists)
-        XCTAssertGreaterThanOrEqual(header.frame.minY, app.statusBars.firstMatch.frame.maxY,
-                                    "The app header must stay below the iPhone status bar")
+        let screen = app.windows.firstMatch.frame
+        let viewport = app.webViews.firstMatch.frame
+        // System status bars are not descendants of the tested application.
+        // On this notched iPhone simulator, the usable WebView must be inset
+        // from both physical screen edges, with its header inside that area.
+        XCTAssertGreaterThan(viewport.minY, screen.minY)
+        XCTAssertLessThan(viewport.maxY, screen.maxY)
+        XCTAssertGreaterThanOrEqual(header.frame.minY, viewport.minY)
         let login = XCTAttachment(screenshot: app.screenshot())
         login.name = "Orka iPhone native login"; login.lifetime = .keepAlways
         add(login)
