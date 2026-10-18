@@ -40,6 +40,12 @@ PY
 simulator_id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; j=json.load(sys.stdin); print(next(d["udid"] for values in j["devices"].values() for d in values if d["name"].startswith("iPhone") and d["isAvailable"]))')
 xcrun simctl boot "$simulator_id" || true
 xcrun simctl bootstatus "$simulator_id" -b
+export_evidence() {
+  xcrun simctl io "$simulator_id" screenshot build/package/iphone-simulator.png || true
+  xcrun xcresulttool export attachments --path build/ios-smoke.xcresult --output-path build/package/screenshots || true
+  xcrun simctl spawn "$simulator_id" log show --last 10m --style compact --predicate 'process == "App"' > build/package/app-console.log 2>&1 || true
+}
+trap export_evidence EXIT
 xcodebuild test -project ios/App/App.xcodeproj -scheme OrkaSideload -configuration Debug \
   -destination "platform=iOS Simulator,id=$simulator_id" -derivedDataPath build/simulator \
   -resultBundlePath build/ios-smoke.xcresult CODE_SIGNING_ALLOWED=NO \

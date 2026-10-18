@@ -35,7 +35,7 @@ final class OrkaUITests: XCTestCase {
         app.links["Back to sign in"].tap()
         XCTAssertTrue(app.staticTexts["Good to see you."].waitForExistence(timeout: 10))
         app.links["Forgot password?"].tap()
-        XCTAssertTrue(app.staticTexts["Letâ€™s get you back in."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Let\u{2019}s get you back in."].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Send reset email"].exists)
         let reset = XCTAttachment(screenshot: app.screenshot())
         reset.name = "Orka iPhone password reset"; reset.lifetime = .keepAlways

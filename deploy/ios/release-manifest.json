@@ -10,8 +10,8 @@
     },
     {
       "path": "build.sh",
-      "bytes": 3346,
-      "sha256": "c721a2772467ed4723184c68812df46ad420105179cf97e806be0f0a87df181d"
+      "bytes": 3751,
+      "sha256": "ffd1339f1656409dabb46af57795b19fb9f12b30f46467de20846f9b6a1ef6e6"
     },
     {
       "path": "ios/.gitignore",
@@ -99,14 +99,14 @@
       "sha256": "9fea608a947e67020c33cad9a6fe3d60c54119dfb8cff87768a8117a15ed7543"
     },
     {
-      "path": "ios/App/App/public/assets/firebase-DKbACjU0.js",
-      "bytes": 171008,
-      "sha256": "90898867de6a37d0a5b9811d0623fcfcfcddfc0b3fdff24ceda6934b494e755c"
+      "path": "ios/App/App/public/assets/firebase-Cpvd_5ZY.js",
+      "bytes": 171024,
+      "sha256": "04720d50e39527f3814399f09acfca7fe0092b21bcb8fdb75f0061c2607ae682"
     },
     {
-      "path": "ios/App/App/public/assets/index-6PPJs5mU.js",
-      "bytes": 417088,
-      "sha256": "7fe2aed4a871791abd114ec9c31f3083a56eed93aca8238aac3c08768b91725e"
+      "path": "ios/App/App/public/assets/index-CNGmvrjB.js",
+      "bytes": 417162,
+      "sha256": "4bf1b11e623d6f54d09cf8ecf1db226a9c666f7a957f29d71d060c231cb7ddad"
     },
     {
       "path": "ios/App/App/public/assets/index-DOGOqGry.css",
@@ -119,9 +119,9 @@
       "sha256": "361da9a02c8cf0f1b740f7ad25acd421bbddd60e353c426aa7f3fa0bdfacbd0d"
     },
     {
-      "path": "ios/App/App/public/assets/web-CyGDbVCv.js",
+      "path": "ios/App/App/public/assets/web-Do5MjS93.js",
       "bytes": 817,
-      "sha256": "c80c13f05ca8b218f7c433833ec52e5748ba15eba5f9fc046be4336809ee4a02"
+      "sha256": "1fa4313ca596cd5b56d986f438f0a539dd652c799fdd2ed0b7a2302c8d115e34"
     },
     {
       "path": "ios/App/App/public/cordova.js",
@@ -141,7 +141,7 @@
     {
       "path": "ios/App/App/public/index.html",
       "bytes": 612,
-      "sha256": "d80ca79661c8ad8fbb4f703b8ceee423578f100f4b0d0902a098861671b02ae9"
+      "sha256": "438a0c5da3a53f3e9cc0a483d8ab03721310e629b3b43dfaeba0e4ef037da6e8"
     },
     {
       "path": "ios/App/App.xcodeproj/project.pbxproj",
@@ -176,7 +176,7 @@
     {
       "path": "OrkaUITests.swift",
       "bytes": 2364,
-      "sha256": "ca5b609439766416802c4414bd5417cd0facbed30d434572289fb54270bde9be"
+      "sha256": "43f5a1c4165b1ea6e8621b0a73f37d05db65d4ca1f145364639d76ba320968a2"
     },
     {
       "path": "package.json",
