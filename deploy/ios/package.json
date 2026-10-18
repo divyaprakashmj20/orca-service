@@ -1,0 +1,11 @@
+{
+  "name": "orka-ios-sideload",
+  "private": true,
+  "version": "1.0.2",
+  "dependencies": {
+    "@capacitor/core": "7.6.9",
+    "@capacitor/ios": "7.6.9",
+    "@capacitor/app": "7.1.2",
+    "@capacitor/push-notifications": "7.0.7"
+  }
+}

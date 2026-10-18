@@ -1,0 +1,33 @@
+name: Build Orka iPhone sideload test
+on:
+  push:
+    branches: [ios/sideload-testing]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: orka-ios-sideload
+  cancel-in-progress: false
+jobs:
+  ios:
+    if: github.event.repository.private == false
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Compile unsigned iPhone app and test native simulator navigation
+        run: bash deploy/ios/build.sh
+      - name: Upload sideload package and verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: orka-ios-sideload-${{ github.run_number }}
+          path: |
+            deploy/ios/build/package/
+            deploy/ios/build/ios-smoke.xcresult/
+            deploy/ios/build-device.log
+            deploy/ios/build-simulator.log
+          retention-days: 14
