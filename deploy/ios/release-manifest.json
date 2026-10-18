@@ -4,6 +4,16 @@
   "nativeRemotePush": false,
   "files": [
     {
+      "path": "add-ui-tests.rb",
+      "bytes": 967,
+      "sha256": "1653025488fa48cf8a2e2a91e3c9e867b669cffbad8007eeeeab62f3498769c7"
+    },
+    {
+      "path": "build.sh",
+      "bytes": 3346,
+      "sha256": "c721a2772467ed4723184c68812df46ad420105179cf97e806be0f0a87df181d"
+    },
+    {
       "path": "ios/.gitignore",
       "bytes": 206,
       "sha256": "2b7132a9943d2622e51e656897ca5162f56b121b40b423dedce1fbc699dba88a"
@@ -162,6 +172,11 @@
       "path": "ios/debug.xcconfig",
       "bytes": 23,
       "sha256": "4838938a72b913b99cfda54a43bbe73f05893071dc6e3702b0adc44794b64272"
+    },
+    {
+      "path": "OrkaUITests.swift",
+      "bytes": 1253,
+      "sha256": "ee03394aab6149a24c6410f1a6dd07c3bf36f083828701dfe26174347ce66b54"
     },
     {
       "path": "package.json",

@@ -1,0 +1,17 @@
+{
+	"appId": "com.lytspeed.orka",
+	"appName": "Orka",
+	"webDir": "dist",
+	"plugins": {
+		"PushNotifications": {
+			"presentationOptions": [
+				"alert",
+				"sound"
+			]
+		}
+	},
+	"packageClassList": [
+		"AppPlugin",
+		"PushNotificationsPlugin"
+	]
+}
