@@ -416,6 +416,7 @@ public class FcmNotificationService {
         if (tag != null) notification.setTag(tag);
         return WebpushConfig.builder()
                 .putHeader("Urgency", "high")
+                .putHeader("TTL", "900")
                 .setNotification(notification.build())
                 .build();
     }

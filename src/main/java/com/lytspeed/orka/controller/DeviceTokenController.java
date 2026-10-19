@@ -104,7 +104,9 @@ public class DeviceTokenController {
     private boolean isValidRegister(DeviceTokenRegisterRequest input) {
         return input != null
                 && input.getFcmToken() != null && !input.getFcmToken().trim().isBlank()
+                && input.getFcmToken().length() <= 512
                 && input.getPlatform() != null && !input.getPlatform().trim().isBlank()
+                && input.getPlatform().length() <= 32
                 && (input.getNotificationRendererVersion() == null || input.getNotificationRendererVersion() == 0
                     || (input.getNotificationRendererVersion() == 1 && "ANDROID".equals(normalizePlatform(input.getPlatform()))));
     }

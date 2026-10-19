@@ -1,0 +1,24 @@
+{
+  "id": "/",
+  "name": "Orka Hotel Workspace",
+  "short_name": "Orka",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f6f2",
+  "theme_color": "#33433d",
+  "icons": [
+    {
+      "src": "/icons/orka-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/orka-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

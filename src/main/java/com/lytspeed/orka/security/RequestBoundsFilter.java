@@ -23,6 +23,7 @@ public class RequestBoundsFilter extends OncePerRequestFilter {
   String path=req.getServletPath();if(!path.startsWith("/api/")||req.getMethod().equals("OPTIONS")){chain.doFilter(req,res);return;}
   long now=System.currentTimeMillis();String peer=req.getRemoteAddr(); // Never trust client-supplied forwarding headers.
   boolean allowed=allow("ip:"+peer,1000,now);
+  if(allowed&&path.equals("/api/device-tokens/test"))allowed=allow("push-test:"+peer,10,now);
   int guest=path.indexOf("/guest/");
   if(allowed&&guest>=0){String token=path.substring(guest+7).split("/",2)[0];allowed=allow("guest:"+peer+":"+Integer.toHexString(token.hashCode()),120,now);}
   if(!allowed){res.setHeader("Retry-After","60");reject(res,429,"Too many requests. Wait a minute before retrying.");return;}

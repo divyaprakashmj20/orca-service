@@ -1,5 +1,5 @@
 {
-  "builtAt": "2026-10-03T04:57:30.552Z",
+  "builtAt": "2026-10-19T00:11:15.257Z",
   "files": [
     {
       "path": "dist/assets/dm-sans-latin-ext-wght-normal-BOFOeGcA.woff2",
@@ -12,19 +12,24 @@
       "sha256": "9fea608a947e67020c33cad9a6fe3d60c54119dfb8cff87768a8117a15ed7543"
     },
     {
-      "path": "dist/assets/firebase-DKbACjU0.js",
-      "bytes": 171008,
-      "sha256": "90898867de6a37d0a5b9811d0623fcfcfcddfc0b3fdff24ceda6934b494e755c"
+      "path": "dist/assets/firebase-CcCgaur4.js",
+      "bytes": 171387,
+      "sha256": "4c95903f788bccd132f1a5d75f4d982c48f77b68b51fe640243c992e1fedb3fb"
     },
     {
-      "path": "dist/assets/index-D-aqieEW.js",
-      "bytes": 415785,
-      "sha256": "895f5e3d00600425946c05c9ae94c0c37300a3ae0588d990f8a1f2ae1452db94"
+      "path": "dist/assets/index-CO4lSsuN.js",
+      "bytes": 425759,
+      "sha256": "4ed29bdee061f002a7712dde14b19f6cc8e340a4298fc64c4fa388f4c4d84b59"
     },
     {
-      "path": "dist/assets/index-DpCm8p1U.css",
+      "path": "dist/assets/index-DOGOqGry.css",
       "bytes": 127419,
-      "sha256": "d910963c36b3991444f7b62c76211535b385abc16765a5228972543cf7bd884c"
+      "sha256": "b44b096bfe823cb253109156ca591543d93a33a470ebb774e1e90c57c820a3d4"
+    },
+    {
+      "path": "dist/assets/index.esm-CvtfnPh7.js",
+      "bytes": 44960,
+      "sha256": "5f3456fb2692e9ba0e8ad083388ddf1af2c1baf9fb6742f95bf020a6fb6c7803"
     },
     {
       "path": "dist/assets/react-Ch0ZTqy3.js",
@@ -32,14 +37,39 @@
       "sha256": "361da9a02c8cf0f1b740f7ad25acd421bbddd60e353c426aa7f3fa0bdfacbd0d"
     },
     {
-      "path": "dist/assets/web-qOQRKDA5.js",
+      "path": "dist/assets/web-VCfne5Iv.js",
       "bytes": 817,
-      "sha256": "760a8d59df72c9d5226924658f4d91052820594930d9c475b8c8c986e87e534e"
+      "sha256": "9a89eb040ca38101da5bb41f180a19a06a3e159db538fe73bd6b88cc92eac6bb"
+    },
+    {
+      "path": "dist/icons/orka-192.png",
+      "bytes": 1488,
+      "sha256": "02db70be7e1d5a0f2d20a247537d61ae63d444306d94dff7706c1b8db308b2af"
+    },
+    {
+      "path": "dist/icons/orka-512.png",
+      "bytes": 4637,
+      "sha256": "a497bb94c1ebb3afa542fd93edfd01d51e8e4d58cd3f6fc97c62aea15345d5f0"
     },
     {
       "path": "dist/index.html",
-      "bytes": 612,
-      "sha256": "c5e675f9432fa78adad0de77431a4aebee9dfdb5d7fb2a49bf8fd560193ce0b2"
+      "bytes": 794,
+      "sha256": "a9ec9d91632e27f509a6fb4a720859977ad31650c60ebc6ff41bd5afb8cdafd7"
+    },
+    {
+      "path": "dist/manifest.webmanifest",
+      "bytes": 474,
+      "sha256": "25aa0916bc0d023a33827a26c8f262ff12c4da77b12dc5381e6aebfec2f0080b"
+    },
+    {
+      "path": "dist/orka-push.js",
+      "bytes": 4432,
+      "sha256": "04fb5af4fbe85435881643f78dbe34b8e3a840b6f8d123a34c5715744ff626ce"
+    },
+    {
+      "path": "dist/web-push-config.json",
+      "bytes": 108,
+      "sha256": "c30a76799e6e31302506667e7b42a01ecd15cae8fcc4cf91bfcaf0963905bc9d"
     }
   ]
 }
